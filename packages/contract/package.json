@@ -13,11 +13,9 @@
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
     "@types/node": "^22.15.3",
-    "eslint": "^9.39.1",
-    "typescript": "5.9.2"
+    "eslint": "^9.39.1"
   },
   "dependencies": {
-    "@orpc/contract": "^1.12.3",
-    "zod": "^3.24.2"
+    "@orpc/contract": "^1.12.3"
   }
 }
