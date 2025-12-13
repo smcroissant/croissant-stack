@@ -33,7 +33,7 @@ importers:
         specifier: 19.2.2
         version: 19.2.2(react@19.2.2)
       zod:
-        specifier: ^4.1.13
+        specifier: '^4.1.13 '
         version: 4.1.13
     devDependencies:
       '@types/pg':
@@ -48,6 +48,9 @@ importers:
       drizzle-kit:
         specifier: ^0.31.8
         version: 0.31.8
+      eslint:
+        specifier: ^9.39.1
+        version: 9.39.1(jiti@2.6.1)
       prettier:
         specifier: ^3.7.4
         version: 3.7.4
@@ -82,9 +85,6 @@ importers:
       '@types/node':
         specifier: ^20
         version: 20.19.26
-      eslint:
-        specifier: ^9
-        version: 9.39.1(jiti@2.6.1)
       eslint-config-next:
         specifier: 16.0.10
         version: 16.0.10(@typescript-eslint/parser@8.48.1(eslint@9.39.1(jiti@2.6.1))(typescript@5.9.2))(eslint@9.39.1(jiti@2.6.1))(typescript@5.9.2)
@@ -167,15 +167,9 @@ importers:
         specifier: 0.5.1
         version: 0.5.1(@babel/core@7.28.5)(react-native@0.81.5(@babel/core@7.28.5)(@types/react@19.2.2)(react@19.2.2))(react@19.2.2)
     devDependencies:
-      eslint:
-        specifier: ^9.25.0
-        version: 9.39.1(jiti@2.6.1)
       eslint-config-expo:
         specifier: ~10.0.0
         version: 10.0.0(eslint@9.39.1(jiti@2.6.1))(typescript@5.9.2)
-      typescript:
-        specifier: ~5.9.2
-        version: 5.9.2
 
   packages/api:
     dependencies:
@@ -198,9 +192,6 @@ importers:
       '@types/node':
         specifier: ^22.15.3
         version: 22.15.3
-      eslint:
-        specifier: ^9.39.1
-        version: 9.39.1(jiti@2.6.1)
 
   packages/auth:
     dependencies:
@@ -220,9 +211,6 @@ importers:
       '@types/node':
         specifier: ^22.15.3
         version: 22.15.3
-      eslint:
-        specifier: ^9.39.1
-        version: 9.39.1(jiti@2.6.1)
 
   packages/contract:
     dependencies:
@@ -239,9 +227,6 @@ importers:
       '@types/node':
         specifier: ^22.15.3
         version: 22.15.3
-      eslint:
-        specifier: ^9.39.1
-        version: 9.39.1(jiti@2.6.1)
 
   packages/db:
     dependencies:
@@ -267,9 +252,6 @@ importers:
       drizzle-kit:
         specifier: ^0.31.8
         version: 0.31.8
-      eslint:
-        specifier: ^9.39.1
-        version: 9.39.1(jiti@2.6.1)
 
   packages/eslint-config:
     devDependencies:
@@ -279,9 +261,6 @@ importers:
       '@next/eslint-plugin-next':
         specifier: ^15.5.0
         version: 15.5.0
-      eslint:
-        specifier: ^9.39.1
-        version: 9.39.1(jiti@2.6.1)
       eslint-config-prettier:
         specifier: ^10.1.1
         version: 10.1.1(eslint@9.39.1(jiti@2.6.1))
@@ -305,21 +284,6 @@ importers:
         version: 8.48.1(eslint@9.39.1(jiti@2.6.1))(typescript@5.9.2)
 
   packages/typescript-config: {}
-
-  packages/ui:
-    devDependencies:
-      '@repo/eslint-config':
-        specifier: workspace:*
-        version: link:../eslint-config
-      '@repo/typescript-config':
-        specifier: workspace:*
-        version: link:../typescript-config
-      '@types/node':
-        specifier: ^22.15.3
-        version: 22.15.3
-      eslint:
-        specifier: ^9.39.1
-        version: 9.39.1(jiti@2.6.1)
 
 packages:
 

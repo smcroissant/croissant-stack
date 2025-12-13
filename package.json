@@ -17,7 +17,8 @@
     "prettier": "^3.7.4",
     "tsx": "^4.21.0",
     "turbo": "^2.6.3",
-    "typescript": "5.9.2"
+    "typescript": "5.9.2",
+    "eslint": "^9.39.1"
   },
   "packageManager": "pnpm@9.0.0",
   "engines": {
@@ -32,6 +33,6 @@
     "pg": "^8.16.3",
     "react": "19.2.2",
     "react-dom": "19.2.2",
-    "zod": "^4.1.13"
+    "zod": "^4.1.13 "
   }
 }
