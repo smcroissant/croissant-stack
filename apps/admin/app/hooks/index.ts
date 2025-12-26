@@ -12,5 +12,11 @@ export {
   usePost,
   usePostReplies,
   usePostThread,
+  useProfile,
+  useMyProfile,
+  useUpdatePrivacy,
+  useUserPosts,
+  useUserReposts,
+  useUserLikes,
 } from "./use-feed";
 

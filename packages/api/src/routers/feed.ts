@@ -3,9 +3,40 @@ import * as z from 'zod'
 import { authorized, base } from '../middleware/auth'
 import { schema } from '@repo/db'
 import { db } from '@repo/db'
-import { eq, desc, inArray, and, sql, count } from 'drizzle-orm'
+import { eq, desc, inArray, and, sql, count, or } from 'drizzle-orm'
 
 const { posts, likes, reposts, follows, user } = schema
+
+// Helper: Check if current user can view a private user's content
+// Returns true if: user is public, OR viewer is the author, OR viewer follows the author
+async function canViewUserContent(authorId: string, viewerId: string, authorIsPrivate: boolean): Promise<boolean> {
+  // Public users are always viewable
+  if (!authorIsPrivate) return true
+  
+  // Users can always see their own content
+  if (authorId === viewerId) return true
+  
+  // Check if viewer follows the private author
+  const [followRecord] = await db
+    .select()
+    .from(follows)
+    .where(and(eq(follows.followerId, viewerId), eq(follows.followingId, authorId)))
+    .limit(1)
+  
+  return !!followRecord
+}
+
+// Helper: Get set of private user IDs that the viewer can see (follows + self)
+async function getVisiblePrivateUserIds(viewerId: string): Promise<Set<string>> {
+  const following = await db
+    .select({ followingId: follows.followingId })
+    .from(follows)
+    .where(eq(follows.followerId, viewerId))
+  
+  const visibleIds = new Set(following.map(f => f.followingId))
+  visibleIds.add(viewerId) // User can always see their own content
+  return visibleIds
+}
 
 // Schemas
 const CreatePostSchema = z.object({
@@ -49,6 +80,7 @@ export const getFeed = authorized
     }
 
     // Build the query for posts
+    // Note: getFeed already correctly handles privacy since it only fetches from followed users + self
     let postsQuery = db
       .select({
         id: posts.id,
@@ -59,6 +91,7 @@ export const getFeed = authorized
         authorName: user.name,
         authorEmail: user.email,
         authorImage: user.image,
+        authorIsPrivate: user.isPrivate,
       })
       .from(posts)
       .innerJoin(user, eq(posts.authorId, user.id))
@@ -165,10 +198,35 @@ export const getFeed = authorized
 export const createPost = authorized
   .input(CreatePostSchema)
   .handler(async ({ input, context }) => {
+    const userId = context.user.id
+
+    // If this is a reply, check if user can view the parent post
+    if (input.parentPostId) {
+      const [parentPost] = await db
+        .select({
+          authorId: posts.authorId,
+          authorIsPrivate: user.isPrivate,
+        })
+        .from(posts)
+        .innerJoin(user, eq(posts.authorId, user.id))
+        .where(eq(posts.id, input.parentPostId))
+        .limit(1)
+
+      if (!parentPost) {
+        throw new ORPCError('NOT_FOUND', { message: 'Parent post not found' })
+      }
+
+      // Check if user can view the parent post (private profile check)
+      const canView = await canViewUserContent(parentPost.authorId, userId, parentPost.authorIsPrivate)
+      if (!canView) {
+        throw new ORPCError('FORBIDDEN', { message: 'Cannot reply to posts from private accounts you don\'t follow' })
+      }
+    }
+
     const newPost = await db.insert(posts).values({
       id: crypto.randomUUID(),
       content: input.content,
-      authorId: context.user.id,
+      authorId: userId,
       parentPostId: input.parentPostId,
     }).returning()
 
@@ -181,6 +239,27 @@ export const likePost = authorized
   .handler(async ({ input, context }) => {
     const userId = context.user.id
     const { postId } = input
+
+    // Get the post and check visibility
+    const [post] = await db
+      .select({
+        authorId: posts.authorId,
+        authorIsPrivate: user.isPrivate,
+      })
+      .from(posts)
+      .innerJoin(user, eq(posts.authorId, user.id))
+      .where(eq(posts.id, postId))
+      .limit(1)
+
+    if (!post) {
+      throw new ORPCError('NOT_FOUND', { message: 'Post not found' })
+    }
+
+    // Check if user can view this post (private profile check)
+    const canView = await canViewUserContent(post.authorId, userId, post.authorIsPrivate)
+    if (!canView) {
+      throw new ORPCError('FORBIDDEN', { message: 'Cannot interact with posts from private accounts you don\'t follow' })
+    }
 
     // Check if already liked
     const [existingLike] = await db
@@ -211,6 +290,27 @@ export const repostPost = authorized
   .handler(async ({ input, context }) => {
     const userId = context.user.id
     const { postId } = input
+
+    // Get the post and check visibility
+    const [post] = await db
+      .select({
+        authorId: posts.authorId,
+        authorIsPrivate: user.isPrivate,
+      })
+      .from(posts)
+      .innerJoin(user, eq(posts.authorId, user.id))
+      .where(eq(posts.id, postId))
+      .limit(1)
+
+    if (!post) {
+      throw new ORPCError('NOT_FOUND', { message: 'Post not found' })
+    }
+
+    // Check if user can view this post (private profile check)
+    const canView = await canViewUserContent(post.authorId, userId, post.authorIsPrivate)
+    if (!canView) {
+      throw new ORPCError('FORBIDDEN', { message: 'Cannot interact with posts from private accounts you don\'t follow' })
+    }
 
     // Check if already reposted
     const [existingRepost] = await db
@@ -302,6 +402,7 @@ export const getPost = authorized
         authorName: user.name,
         authorEmail: user.email,
         authorImage: user.image,
+        authorIsPrivate: user.isPrivate,
       })
       .from(posts)
       .innerJoin(user, eq(posts.authorId, user.id))
@@ -310,6 +411,12 @@ export const getPost = authorized
 
     if (!post) {
       throw new ORPCError('NOT_FOUND', { message: 'Post not found' })
+    }
+
+    // Check visibility: private profiles only visible to followers
+    const canView = await canViewUserContent(post.authorId, userId, post.authorIsPrivate)
+    if (!canView) {
+      throw new ORPCError('FORBIDDEN', { message: 'This post is from a private account' })
     }
 
     // Get counts and user interaction status
@@ -332,7 +439,7 @@ export const getPost = authorized
   })
 
 // Type for recursive nested replies
-type NestedReply = {
+export type NestedReply = {
   id: string
   content: string
   authorId: string
@@ -341,6 +448,7 @@ type NestedReply = {
   authorName: string | null
   authorEmail: string
   authorImage: string | null
+  authorIsPrivate: boolean
   likesCount: number
   repostsCount: number
   repliesCount: number
@@ -360,7 +468,10 @@ export const getPostReplies = authorized
     const { postId, limit, cursor } = input
     const userId = context.user.id
 
-    // Fetch direct replies first
+    // Get the set of private user IDs that this user can view
+    const visiblePrivateUserIds = await getVisiblePrivateUserIds(userId)
+
+    // Fetch direct replies first (only from public users or followed private users)
     const directRepliesQuery = db
       .select({
         id: posts.id,
@@ -371,6 +482,7 @@ export const getPostReplies = authorized
         authorName: user.name,
         authorEmail: user.email,
         authorImage: user.image,
+        authorIsPrivate: user.isPrivate,
       })
       .from(posts)
       .innerJoin(user, eq(posts.authorId, user.id))
@@ -385,7 +497,12 @@ export const getPostReplies = authorized
       .orderBy(desc(posts.createdAt))
       .limit(limit + 1)
 
-    const directReplies = await directRepliesQuery
+    const directRepliesRaw = await directRepliesQuery
+    
+    // Filter out private users that the viewer doesn't follow
+    const directReplies = directRepliesRaw.filter(reply => 
+      !reply.authorIsPrivate || visiblePrivateUserIds.has(reply.authorId)
+    )
 
     const hasMore = directReplies.length > limit
     const repliesToReturn = hasMore ? directReplies.slice(0, -1) : directReplies
@@ -395,11 +512,11 @@ export const getPostReplies = authorized
       return { replies: [], nextCursor: undefined }
     }
 
-    // Recursive function to fetch all descendants
+    // Recursive function to fetch all descendants (filtered by visibility)
     async function fetchAllDescendants(parentIds: string[]): Promise<typeof directReplies> {
       if (parentIds.length === 0) return []
       
-      const children = await db
+      const childrenRaw = await db
         .select({
           id: posts.id,
           content: posts.content,
@@ -409,11 +526,17 @@ export const getPostReplies = authorized
           authorName: user.name,
           authorEmail: user.email,
           authorImage: user.image,
+          authorIsPrivate: user.isPrivate,
         })
         .from(posts)
         .innerJoin(user, eq(posts.authorId, user.id))
         .where(inArray(posts.parentPostId, parentIds))
         .orderBy(desc(posts.createdAt))
+      
+      // Filter out private users that the viewer doesn't follow
+      const children = childrenRaw.filter(child => 
+        !child.authorIsPrivate || visiblePrivateUserIds.has(child.authorId)
+      )
       
       if (children.length === 0) return []
       
@@ -474,6 +597,7 @@ export const getPostReplies = authorized
     for (const post of allPosts) {
       enrichedPostsMap.set(post.id, {
         ...post,
+        authorIsPrivate: post.authorIsPrivate,
         likesCount: likeCountMap.get(post.id) ?? 0,
         repostsCount: repostCountMap.get(post.id) ?? 0,
         repliesCount: replyCountMap.get(post.id) ?? 0,
@@ -510,6 +634,9 @@ export const getPostThread = authorized
     const { postId } = input
     const userId = context.user.id
 
+    // Get the set of private user IDs that this user can view
+    const visiblePrivateUserIds = await getVisiblePrivateUserIds(userId)
+
     // Walk up the parent chain to get all ancestors
     const ancestors: Array<{
       id: string
@@ -520,6 +647,7 @@ export const getPostThread = authorized
       authorName: string | null
       authorEmail: string
       authorImage: string | null
+      authorIsPrivate: boolean
     }> = []
 
     let currentPostId: string | null = postId
@@ -551,6 +679,7 @@ export const getPostThread = authorized
           authorName: user.name,
           authorEmail: user.email,
           authorImage: user.image,
+          authorIsPrivate: user.isPrivate,
         })
         .from(posts)
         .innerJoin(user, eq(posts.authorId, user.id))
@@ -559,7 +688,11 @@ export const getPostThread = authorized
 
       if (!parent) break
 
-      ancestors.unshift(parent) // Add to beginning to maintain chronological order
+      // Skip private users that the viewer doesn't follow (but continue chain)
+      if (!parent.authorIsPrivate || visiblePrivateUserIds.has(parent.authorId)) {
+        ancestors.unshift(parent) // Add to beginning to maintain chronological order
+      }
+      
       currentPostId = parent.parentPostId
       depth++
     }
@@ -609,6 +742,7 @@ export const getPostThread = authorized
 
     const enrichedThread = ancestors.map(post => ({
       ...post,
+      authorIsPrivate: post.authorIsPrivate,
       likesCount: likeCountMap.get(post.id) ?? 0,
       repostsCount: repostCountMap.get(post.id) ?? 0,
       repliesCount: replyCountMap.get(post.id) ?? 0,
@@ -617,6 +751,401 @@ export const getPostThread = authorized
     }))
 
     return { thread: enrichedThread }
+  })
+
+// Get user profile
+export const getProfile = authorized
+  .input(UserIdSchema)
+  .handler(async ({ input, context }) => {
+    const { userId: profileUserId } = input
+    const viewerId = context.user.id
+
+    const [profileUser] = await db
+      .select({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        image: user.image,
+        isPrivate: user.isPrivate,
+        createdAt: user.createdAt,
+      })
+      .from(user)
+      .where(eq(user.id, profileUserId))
+      .limit(1)
+
+    if (!profileUser) {
+      throw new ORPCError('NOT_FOUND', { message: 'User not found' })
+    }
+
+    // Get follower/following counts
+    const [[followersCount], [followingCount], [postsCount]] = await Promise.all([
+      db.select({ count: count() }).from(follows).where(eq(follows.followingId, profileUserId)),
+      db.select({ count: count() }).from(follows).where(eq(follows.followerId, profileUserId)),
+      db.select({ count: count() }).from(posts).where(eq(posts.authorId, profileUserId)),
+    ])
+
+    // Check if viewer follows this user
+    const [isFollowingRecord] = await db
+      .select()
+      .from(follows)
+      .where(and(eq(follows.followerId, viewerId), eq(follows.followingId, profileUserId)))
+      .limit(1)
+
+    const isOwnProfile = viewerId === profileUserId
+    const isFollowing = !!isFollowingRecord
+
+    return {
+      ...profileUser,
+      followersCount: followersCount?.count ?? 0,
+      followingCount: followingCount?.count ?? 0,
+      postsCount: postsCount?.count ?? 0,
+      isOwnProfile,
+      isFollowing,
+      canViewContent: !profileUser.isPrivate || isOwnProfile || isFollowing,
+    }
+  })
+
+// Get current user's own profile
+export const getMyProfile = authorized
+  .handler(async ({ context }) => {
+    const userId = context.user.id
+
+    const [profileUser] = await db
+      .select({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        image: user.image,
+        isPrivate: user.isPrivate,
+        createdAt: user.createdAt,
+      })
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1)
+
+    if (!profileUser) {
+      throw new ORPCError('NOT_FOUND', { message: 'User not found' })
+    }
+
+    // Get follower/following counts
+    const [[followersCount], [followingCount], [postsCount]] = await Promise.all([
+      db.select({ count: count() }).from(follows).where(eq(follows.followingId, userId)),
+      db.select({ count: count() }).from(follows).where(eq(follows.followerId, userId)),
+      db.select({ count: count() }).from(posts).where(eq(posts.authorId, userId)),
+    ])
+
+    return {
+      ...profileUser,
+      followersCount: followersCount?.count ?? 0,
+      followingCount: followingCount?.count ?? 0,
+      postsCount: postsCount?.count ?? 0,
+    }
+  })
+
+// Update privacy setting
+export const updatePrivacy = authorized
+  .input(z.object({ isPrivate: z.boolean() }))
+  .handler(async ({ input, context }) => {
+    const userId = context.user.id
+
+    await db
+      .update(user)
+      .set({ isPrivate: input.isPrivate })
+      .where(eq(user.id, userId))
+
+    return { isPrivate: input.isPrivate }
+  })
+
+// Helper function to enrich posts with counts and user interaction status
+async function enrichPosts(
+  postsToEnrich: Array<{
+    id: string
+    content: string
+    authorId: string
+    parentPostId: string | null
+    createdAt: Date
+    authorName: string | null
+    authorEmail: string
+    authorImage: string | null
+    authorIsPrivate: boolean
+  }>,
+  viewerId: string
+) {
+  if (postsToEnrich.length === 0) return []
+
+  const postIds = postsToEnrich.map(p => p.id)
+
+  const [likeCounts, repostCounts, replyCounts, userLikes, userReposts] = await Promise.all([
+    db
+      .select({ postId: likes.postId, count: count() })
+      .from(likes)
+      .where(inArray(likes.postId, postIds))
+      .groupBy(likes.postId),
+    db
+      .select({ postId: reposts.postId, count: count() })
+      .from(reposts)
+      .where(inArray(reposts.postId, postIds))
+      .groupBy(reposts.postId),
+    db
+      .select({ parentPostId: posts.parentPostId, count: count() })
+      .from(posts)
+      .where(inArray(posts.parentPostId, postIds))
+      .groupBy(posts.parentPostId),
+    db
+      .select({ postId: likes.postId })
+      .from(likes)
+      .where(and(eq(likes.userId, viewerId), inArray(likes.postId, postIds))),
+    db
+      .select({ postId: reposts.postId })
+      .from(reposts)
+      .where(and(eq(reposts.userId, viewerId), inArray(reposts.postId, postIds))),
+  ])
+
+  const likeCountMap = new Map(likeCounts.map(l => [l.postId, l.count]))
+  const repostCountMap = new Map(repostCounts.map(r => [r.postId, r.count]))
+  const replyCountMap = new Map(replyCounts.map(r => [r.parentPostId, r.count]))
+  const userLikedSet = new Set(userLikes.map(l => l.postId))
+  const userRepostedSet = new Set(userReposts.map(r => r.postId))
+
+  return postsToEnrich.map(post => ({
+    ...post,
+    likesCount: likeCountMap.get(post.id) ?? 0,
+    repostsCount: repostCountMap.get(post.id) ?? 0,
+    repliesCount: replyCountMap.get(post.id) ?? 0,
+    isLiked: userLikedSet.has(post.id),
+    isReposted: userRepostedSet.has(post.id),
+  }))
+}
+
+// Get user's posts
+export const getUserPosts = authorized
+  .input(z.object({
+    userId: z.string(),
+    limit: z.number().min(1).max(50).default(20),
+    cursor: z.string().optional(),
+  }))
+  .handler(async ({ input, context }) => {
+    const { userId: profileUserId, limit, cursor } = input
+    const viewerId = context.user.id
+
+    // Check if viewer can view this user's content
+    const [profileUser] = await db
+      .select({ isPrivate: user.isPrivate })
+      .from(user)
+      .where(eq(user.id, profileUserId))
+      .limit(1)
+
+    if (!profileUser) {
+      throw new ORPCError('NOT_FOUND', { message: 'User not found' })
+    }
+
+    const canView = await canViewUserContent(profileUserId, viewerId, profileUser.isPrivate)
+    if (!canView) {
+      throw new ORPCError('FORBIDDEN', { message: 'This account is private' })
+    }
+
+    // Get user's posts
+    const userPosts = await db
+      .select({
+        id: posts.id,
+        content: posts.content,
+        authorId: posts.authorId,
+        parentPostId: posts.parentPostId,
+        createdAt: posts.createdAt,
+        authorName: user.name,
+        authorEmail: user.email,
+        authorImage: user.image,
+        authorIsPrivate: user.isPrivate,
+      })
+      .from(posts)
+      .innerJoin(user, eq(posts.authorId, user.id))
+      .where(
+        cursor
+          ? and(eq(posts.authorId, profileUserId), sql`${posts.createdAt} < ${new Date(cursor)}`)
+          : eq(posts.authorId, profileUserId)
+      )
+      .orderBy(desc(posts.createdAt))
+      .limit(limit + 1)
+
+    const hasMore = userPosts.length > limit
+    const postsToReturn = hasMore ? userPosts.slice(0, -1) : userPosts
+    const nextCursor = hasMore ? postsToReturn[postsToReturn.length - 1]?.createdAt.toISOString() : undefined
+
+    const enrichedPosts = await enrichPosts(postsToReturn, viewerId)
+
+    return { posts: enrichedPosts, nextCursor }
+  })
+
+// Get user's reposts
+export const getUserReposts = authorized
+  .input(z.object({
+    userId: z.string(),
+    limit: z.number().min(1).max(50).default(20),
+    cursor: z.string().optional(),
+  }))
+  .handler(async ({ input, context }) => {
+    const { userId: profileUserId, limit, cursor } = input
+    const viewerId = context.user.id
+
+    // Check if viewer can view this user's content
+    const [profileUser] = await db
+      .select({ isPrivate: user.isPrivate })
+      .from(user)
+      .where(eq(user.id, profileUserId))
+      .limit(1)
+
+    if (!profileUser) {
+      throw new ORPCError('NOT_FOUND', { message: 'User not found' })
+    }
+
+    const canView = await canViewUserContent(profileUserId, viewerId, profileUser.isPrivate)
+    if (!canView) {
+      throw new ORPCError('FORBIDDEN', { message: 'This account is private' })
+    }
+
+    // Get posts that the user reposted
+    const userReposts = await db
+      .select({
+        repostId: reposts.id,
+        repostCreatedAt: reposts.createdAt,
+        id: posts.id,
+        content: posts.content,
+        authorId: posts.authorId,
+        parentPostId: posts.parentPostId,
+        createdAt: posts.createdAt,
+        authorName: user.name,
+        authorEmail: user.email,
+        authorImage: user.image,
+        authorIsPrivate: user.isPrivate,
+      })
+      .from(reposts)
+      .innerJoin(posts, eq(reposts.postId, posts.id))
+      .innerJoin(user, eq(posts.authorId, user.id))
+      .where(
+        cursor
+          ? and(eq(reposts.userId, profileUserId), sql`${reposts.createdAt} < ${new Date(cursor)}`)
+          : eq(reposts.userId, profileUserId)
+      )
+      .orderBy(desc(reposts.createdAt))
+      .limit(limit + 1)
+
+    const hasMore = userReposts.length > limit
+    const repostsToReturn = hasMore ? userReposts.slice(0, -1) : userReposts
+    const nextCursor = hasMore ? repostsToReturn[repostsToReturn.length - 1]?.repostCreatedAt.toISOString() : undefined
+
+    // Filter out reposts of private users' posts that the viewer can't see
+    const visiblePrivateUserIds = await getVisiblePrivateUserIds(viewerId)
+    const filteredReposts = repostsToReturn.filter(r => 
+      !r.authorIsPrivate || visiblePrivateUserIds.has(r.authorId)
+    )
+
+    const postsForEnrichment = filteredReposts.map(r => ({
+      id: r.id,
+      content: r.content,
+      authorId: r.authorId,
+      parentPostId: r.parentPostId,
+      createdAt: r.createdAt,
+      authorName: r.authorName,
+      authorEmail: r.authorEmail,
+      authorImage: r.authorImage,
+      authorIsPrivate: r.authorIsPrivate,
+    }))
+
+    const enrichedPosts = await enrichPosts(postsForEnrichment, viewerId)
+
+    // Add repost metadata
+    const postsWithRepostInfo = enrichedPosts.map((post, index) => ({
+      ...post,
+      repostedAt: filteredReposts[index]?.repostCreatedAt,
+    }))
+
+    return { posts: postsWithRepostInfo, nextCursor }
+  })
+
+// Get user's likes
+export const getUserLikes = authorized
+  .input(z.object({
+    userId: z.string(),
+    limit: z.number().min(1).max(50).default(20),
+    cursor: z.string().optional(),
+  }))
+  .handler(async ({ input, context }) => {
+    const { userId: profileUserId, limit, cursor } = input
+    const viewerId = context.user.id
+
+    // Check if viewer can view this user's content
+    const [profileUser] = await db
+      .select({ isPrivate: user.isPrivate })
+      .from(user)
+      .where(eq(user.id, profileUserId))
+      .limit(1)
+
+    if (!profileUser) {
+      throw new ORPCError('NOT_FOUND', { message: 'User not found' })
+    }
+
+    const canView = await canViewUserContent(profileUserId, viewerId, profileUser.isPrivate)
+    if (!canView) {
+      throw new ORPCError('FORBIDDEN', { message: 'This account is private' })
+    }
+
+    // Get posts that the user liked
+    const userLikes = await db
+      .select({
+        likeId: likes.id,
+        likeCreatedAt: likes.createdAt,
+        id: posts.id,
+        content: posts.content,
+        authorId: posts.authorId,
+        parentPostId: posts.parentPostId,
+        createdAt: posts.createdAt,
+        authorName: user.name,
+        authorEmail: user.email,
+        authorImage: user.image,
+        authorIsPrivate: user.isPrivate,
+      })
+      .from(likes)
+      .innerJoin(posts, eq(likes.postId, posts.id))
+      .innerJoin(user, eq(posts.authorId, user.id))
+      .where(
+        cursor
+          ? and(eq(likes.userId, profileUserId), sql`${likes.createdAt} < ${new Date(cursor)}`)
+          : eq(likes.userId, profileUserId)
+      )
+      .orderBy(desc(likes.createdAt))
+      .limit(limit + 1)
+
+    const hasMore = userLikes.length > limit
+    const likesToReturn = hasMore ? userLikes.slice(0, -1) : userLikes
+    const nextCursor = hasMore ? likesToReturn[likesToReturn.length - 1]?.likeCreatedAt.toISOString() : undefined
+
+    // Filter out likes of private users' posts that the viewer can't see
+    const visiblePrivateUserIds = await getVisiblePrivateUserIds(viewerId)
+    const filteredLikes = likesToReturn.filter(l => 
+      !l.authorIsPrivate || visiblePrivateUserIds.has(l.authorId)
+    )
+
+    const postsForEnrichment = filteredLikes.map(l => ({
+      id: l.id,
+      content: l.content,
+      authorId: l.authorId,
+      parentPostId: l.parentPostId,
+      createdAt: l.createdAt,
+      authorName: l.authorName,
+      authorEmail: l.authorEmail,
+      authorImage: l.authorImage,
+      authorIsPrivate: l.authorIsPrivate,
+    }))
+
+    const enrichedPosts = await enrichPosts(postsForEnrichment, viewerId)
+
+    // Add like metadata
+    const postsWithLikeInfo = enrichedPosts.map((post, index) => ({
+      ...post,
+      likedAt: filteredLikes[index]?.likeCreatedAt,
+    }))
+
+    return { posts: postsWithLikeInfo, nextCursor }
   })
 
 export const feedRouter = {
@@ -629,5 +1158,11 @@ export const feedRouter = {
   getPost,
   getPostReplies,
   getPostThread,
+  getProfile,
+  getMyProfile,
+  updatePrivacy,
+  getUserPosts,
+  getUserReposts,
+  getUserLikes,
 }
 

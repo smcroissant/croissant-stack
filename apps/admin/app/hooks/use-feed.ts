@@ -234,3 +234,105 @@ export function usePostThread(postId: string) {
   });
 }
 
+/**
+ * Hook to fetch a user's profile
+ */
+export function useProfile(userId: string) {
+  return useQuery({
+    queryKey: ["profile", userId],
+    queryFn: async () => {
+      return orpc.feed.getProfile.call({ userId });
+    },
+    enabled: !!userId,
+  });
+}
+
+/**
+ * Hook to fetch the current user's profile
+ */
+export function useMyProfile() {
+  return useQuery({
+    queryKey: ["myProfile"],
+    queryFn: async () => {
+      return orpc.feed.getMyProfile.call({});
+    },
+  });
+}
+
+/**
+ * Hook to update privacy setting
+ */
+export function useUpdatePrivacy() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (isPrivate: boolean) => {
+      return orpc.feed.updatePrivacy.call({ isPrivate });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["myProfile"] });
+      queryClient.invalidateQueries({ queryKey: ["profile"] });
+    },
+  });
+}
+
+/**
+ * Hook to fetch a user's posts with infinite scroll
+ */
+export function useUserPosts(userId: string, limit: number = 20) {
+  return useInfiniteQuery({
+    queryKey: ["userPosts", userId, limit],
+    queryFn: async ({ pageParam }) => {
+      const result = await orpc.feed.getUserPosts.call({
+        userId,
+        limit,
+        cursor: pageParam,
+      });
+      return result;
+    },
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    initialPageParam: undefined as string | undefined,
+    enabled: !!userId,
+  });
+}
+
+/**
+ * Hook to fetch a user's reposts with infinite scroll
+ */
+export function useUserReposts(userId: string, limit: number = 20) {
+  return useInfiniteQuery({
+    queryKey: ["userReposts", userId, limit],
+    queryFn: async ({ pageParam }) => {
+      const result = await orpc.feed.getUserReposts.call({
+        userId,
+        limit,
+        cursor: pageParam,
+      });
+      return result;
+    },
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    initialPageParam: undefined as string | undefined,
+    enabled: !!userId,
+  });
+}
+
+/**
+ * Hook to fetch a user's likes with infinite scroll
+ */
+export function useUserLikes(userId: string, limit: number = 20) {
+  return useInfiniteQuery({
+    queryKey: ["userLikes", userId, limit],
+    queryFn: async ({ pageParam }) => {
+      const result = await orpc.feed.getUserLikes.call({
+        userId,
+        limit,
+        cursor: pageParam,
+      });
+      return result;
+    },
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    initialPageParam: undefined as string | undefined,
+    enabled: !!userId,
+  });
+}
+
