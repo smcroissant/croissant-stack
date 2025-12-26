@@ -331,7 +331,25 @@ export const getPost = authorized
     }
   })
 
-// Get replies for a post with pagination
+// Type for recursive nested replies
+type NestedReply = {
+  id: string
+  content: string
+  authorId: string
+  parentPostId: string | null
+  createdAt: Date
+  authorName: string | null
+  authorEmail: string
+  authorImage: string | null
+  likesCount: number
+  repostsCount: number
+  repliesCount: number
+  isLiked: boolean
+  isReposted: boolean
+  nestedReplies: NestedReply[]
+}
+
+// Get replies for a post with ALL nested replies (recursive)
 export const getPostReplies = authorized
   .input(z.object({
     postId: z.string(),
@@ -342,8 +360,8 @@ export const getPostReplies = authorized
     const { postId, limit, cursor } = input
     const userId = context.user.id
 
-    // Fetch replies
-    const repliesQuery = db
+    // Fetch direct replies first
+    const directRepliesQuery = db
       .select({
         id: posts.id,
         content: posts.content,
@@ -367,47 +385,81 @@ export const getPostReplies = authorized
       .orderBy(desc(posts.createdAt))
       .limit(limit + 1)
 
-    const replies = await repliesQuery
+    const directReplies = await directRepliesQuery
 
-    const hasMore = replies.length > limit
-    const repliesToReturn = hasMore ? replies.slice(0, -1) : replies
+    const hasMore = directReplies.length > limit
+    const repliesToReturn = hasMore ? directReplies.slice(0, -1) : directReplies
     const nextCursor = hasMore ? repliesToReturn[repliesToReturn.length - 1]?.createdAt.toISOString() : undefined
 
     if (repliesToReturn.length === 0) {
       return { replies: [], nextCursor: undefined }
     }
 
-    const replyIds = repliesToReturn.map(r => r.id)
+    // Recursive function to fetch all descendants
+    async function fetchAllDescendants(parentIds: string[]): Promise<typeof directReplies> {
+      if (parentIds.length === 0) return []
+      
+      const children = await db
+        .select({
+          id: posts.id,
+          content: posts.content,
+          authorId: posts.authorId,
+          parentPostId: posts.parentPostId,
+          createdAt: posts.createdAt,
+          authorName: user.name,
+          authorEmail: user.email,
+          authorImage: user.image,
+        })
+        .from(posts)
+        .innerJoin(user, eq(posts.authorId, user.id))
+        .where(inArray(posts.parentPostId, parentIds))
+        .orderBy(desc(posts.createdAt))
+      
+      if (children.length === 0) return []
+      
+      const childIds = children.map(c => c.id)
+      const grandchildren = await fetchAllDescendants(childIds)
+      
+      return [...children, ...grandchildren]
+    }
 
-    // Get counts for likes, reposts, and nested replies
+    // Fetch all nested replies recursively
+    const directReplyIds = repliesToReturn.map(r => r.id)
+    const allNestedReplies = await fetchAllDescendants(directReplyIds)
+    
+    // Combine all posts for stats lookup
+    const allPosts = [...repliesToReturn, ...allNestedReplies]
+    const allPostIds = allPosts.map(p => p.id)
+
+    // Get counts for all posts at once
     const [likeCounts, repostCounts, replyCounts] = await Promise.all([
       db
         .select({ postId: likes.postId, count: count() })
         .from(likes)
-        .where(inArray(likes.postId, replyIds))
+        .where(inArray(likes.postId, allPostIds))
         .groupBy(likes.postId),
       db
         .select({ postId: reposts.postId, count: count() })
         .from(reposts)
-        .where(inArray(reposts.postId, replyIds))
+        .where(inArray(reposts.postId, allPostIds))
         .groupBy(reposts.postId),
       db
         .select({ parentPostId: posts.parentPostId, count: count() })
         .from(posts)
-        .where(inArray(posts.parentPostId, replyIds))
+        .where(inArray(posts.parentPostId, allPostIds))
         .groupBy(posts.parentPostId),
     ])
 
-    // Check if current user liked/reposted each reply
+    // Check user interactions for all posts
     const [userLikes, userReposts] = await Promise.all([
       db
         .select({ postId: likes.postId })
         .from(likes)
-        .where(and(eq(likes.userId, userId), inArray(likes.postId, replyIds))),
+        .where(and(eq(likes.userId, userId), inArray(likes.postId, allPostIds))),
       db
         .select({ postId: reposts.postId })
         .from(reposts)
-        .where(and(eq(reposts.userId, userId), inArray(reposts.postId, replyIds))),
+        .where(and(eq(reposts.userId, userId), inArray(reposts.postId, allPostIds))),
     ])
 
     const likeCountMap = new Map(likeCounts.map(l => [l.postId, l.count]))
@@ -416,14 +468,37 @@ export const getPostReplies = authorized
     const userLikedSet = new Set(userLikes.map(l => l.postId))
     const userRepostedSet = new Set(userReposts.map(r => r.postId))
 
-    const enrichedReplies = repliesToReturn.map(reply => ({
-      ...reply,
-      likesCount: likeCountMap.get(reply.id) ?? 0,
-      repostsCount: repostCountMap.get(reply.id) ?? 0,
-      repliesCount: replyCountMap.get(reply.id) ?? 0,
-      isLiked: userLikedSet.has(reply.id),
-      isReposted: userRepostedSet.has(reply.id),
-    }))
+    // Build a map of all enriched posts
+    const enrichedPostsMap = new Map<string, NestedReply>()
+    
+    for (const post of allPosts) {
+      enrichedPostsMap.set(post.id, {
+        ...post,
+        likesCount: likeCountMap.get(post.id) ?? 0,
+        repostsCount: repostCountMap.get(post.id) ?? 0,
+        repliesCount: replyCountMap.get(post.id) ?? 0,
+        isLiked: userLikedSet.has(post.id),
+        isReposted: userRepostedSet.has(post.id),
+        nestedReplies: [],
+      })
+    }
+
+    // Build the tree structure
+    for (const post of allNestedReplies) {
+      if (post.parentPostId && enrichedPostsMap.has(post.parentPostId)) {
+        const parent = enrichedPostsMap.get(post.parentPostId)!
+        const child = enrichedPostsMap.get(post.id)!
+        parent.nestedReplies.push(child)
+      }
+    }
+
+    // Sort nested replies by createdAt (newest first)
+    for (const post of enrichedPostsMap.values()) {
+      post.nestedReplies.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    }
+
+    // Get top-level replies with their nested tree
+    const enrichedReplies = repliesToReturn.map(reply => enrichedPostsMap.get(reply.id)!)
 
     return { replies: enrichedReplies, nextCursor }
   })

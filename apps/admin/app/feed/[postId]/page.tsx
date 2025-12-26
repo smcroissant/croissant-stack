@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { PostCard } from "../../components/post-card";
+import { NestedReplyCard, type NestedReply } from "../../components/nested-reply";
 import { ComposePost } from "../../components/compose-post";
 import { AuthRequiredDialog } from "../../components/auth-required-dialog";
 import { Button } from "@repo/ui/components/button";
@@ -14,7 +15,26 @@ import { useAuth } from "../../providers/auth-provider";
 import { usePost, usePostReplies, usePostThread, useCreatePost, useLikePost, useRepostPost } from "../../hooks/use-feed";
 import { formatDistanceToNow } from "date-fns";
 
-// Thread post card with connecting line
+// Helper function to recursively convert API reply to NestedReply type
+function convertReply(reply: any): NestedReply {
+  return {
+    id: reply.id,
+    content: reply.content,
+    authorId: reply.authorId,
+    authorName: reply.authorName || "Unknown",
+    authorEmail: reply.authorEmail,
+    parentPostId: reply.parentPostId,
+    createdAt: new Date(reply.createdAt),
+    likesCount: reply.likesCount,
+    repostsCount: reply.repostsCount,
+    repliesCount: reply.repliesCount,
+    isLiked: reply.isLiked,
+    isReposted: reply.isReposted,
+    nestedReplies: (reply.nestedReplies || []).map(convertReply),
+  };
+}
+
+// Thread post card for ancestors
 function ThreadPostCard({
   post,
   onLike,
@@ -22,7 +42,6 @@ function ThreadPostCard({
   onReply,
   onAuthorClick,
   onPostClick,
-  showThreadLine = false,
 }: {
   post: {
     id: string;
@@ -43,13 +62,9 @@ function ThreadPostCard({
   onReply?: (postId: string) => void;
   onAuthorClick?: (authorId: string) => void;
   onPostClick?: (postId: string) => void;
-  showThreadLine?: boolean;
 }) {
   return (
-    <div className="relative">
-      {showThreadLine && (
-        <div className="absolute left-7 top-14 bottom-0 w-0.5 bg-border" />
-      )}
+    <div className="hover:bg-accent/5 transition-colors">
       <PostCard
         post={post}
         onLike={onLike}
@@ -70,6 +85,7 @@ export default function PostDetailPage() {
   
   const [isComposeOpen, setIsComposeOpen] = useState(false);
   const [showAuthRequired, setShowAuthRequired] = useState(false);
+  const [replyTarget, setReplyTarget] = useState<{ id: string; content: string } | null>(null);
 
   // Fetch post, thread (ancestors), and replies
   const {
@@ -122,11 +138,15 @@ export default function PostDetailPage() {
       return;
     }
 
+    // Use replyTarget.id if replying to a specific post, otherwise use the main postId
+    const parentId = replyTarget?.id || postId;
+
     createPostMutation.mutate(
-      { content, parentPostId: postId },
+      { content, parentPostId: parentId },
       {
         onSuccess: () => {
           setIsComposeOpen(false);
+          setReplyTarget(null);
           refetchPost();
           refetchReplies();
         },
@@ -162,10 +182,36 @@ export default function PostDetailPage() {
     });
   };
 
-  const handleReplyClick = () => {
+  // Helper to find a post by ID in the nested replies tree
+  const findPostInReplies = (targetId: string, repliesList: any[]): any | null => {
+    for (const reply of repliesList) {
+      if (reply.id === targetId) return reply;
+      if (reply.nestedReplies?.length > 0) {
+        const found = findPostInReplies(targetId, reply.nestedReplies);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
+  const handleReplyClick = (targetPostId: string) => {
     if (!session) {
       setShowAuthRequired(true);
       return;
+    }
+
+    // If replying to the main post
+    if (targetPostId === postId) {
+      setReplyTarget({ id: postId, content: post?.content || "" });
+    } else {
+      // Find the post in replies to get its content
+      const targetPost = findPostInReplies(targetPostId, replies);
+      if (targetPost) {
+        setReplyTarget({ id: targetPostId, content: targetPost.content });
+      } else {
+        // Fallback to just the ID
+        setReplyTarget({ id: targetPostId, content: "" });
+      }
     }
     setIsComposeOpen(true);
   };
@@ -295,7 +341,7 @@ export default function PostDetailPage() {
         </div>
       ) : thread.length > 0 ? (
         <div>
-          {thread.map((parentPost, index) => (
+          {thread.map((parentPost) => (
             <ThreadPostCard
               key={parentPost.id}
               post={{
@@ -316,14 +362,13 @@ export default function PostDetailPage() {
               onRepost={handleRepost}
               onAuthorClick={handleAuthorClick}
               onPostClick={handlePostClick}
-              showThreadLine={true}
             />
           ))}
         </div>
       ) : null}
 
-      {/* Main Post (highlighted) */}
-      <Card className="p-4 border-b border-x-0 border-t-0 rounded-none bg-accent/5">
+      {/* Main Post */}
+      <Card className="p-4 border-b border-x-0 border-t-0 rounded-none">
         <div className="flex gap-3">
           <Avatar
             className="w-12 h-12 cursor-pointer"
@@ -379,7 +424,7 @@ export default function PostDetailPage() {
             variant="ghost"
             size="sm"
             className="gap-2 h-10 px-3 text-muted-foreground hover:text-primary"
-            onClick={handleReplyClick}
+            onClick={() => handleReplyClick(postId)}
           >
             <MessageCircle className="w-5 h-5" />
           </Button>
@@ -421,9 +466,15 @@ export default function PostDetailPage() {
       </Card>
 
       {/* Replies Section Header */}
-      <div className="p-4 border-b">
-        <h2 className="font-semibold">
-          Replies {post.repliesCount > 0 && `(${post.repliesCount})`}
+      <div className="px-4 py-3 border-b">
+        <h2 className="font-semibold flex items-center gap-2">
+          <MessageCircle className="w-4 h-4" />
+          Replies
+          {post.repliesCount > 0 && (
+            <span className="text-sm font-normal text-muted-foreground">
+              ({post.repliesCount})
+            </span>
+          )}
         </h2>
       </div>
 
@@ -453,7 +504,7 @@ export default function PostDetailPage() {
           <p className="text-muted-foreground mb-4">
             No replies yet. Be the first to reply!
           </p>
-          <Button onClick={handleReplyClick} variant="outline" className="gap-2">
+          <Button onClick={() => handleReplyClick(postId)} variant="outline" className="gap-2">
             <MessageCircle className="w-4 h-4" />
             Reply
           </Button>
@@ -461,27 +512,13 @@ export default function PostDetailPage() {
       ) : (
         <div>
           {replies.map((reply) => (
-            <PostCard
+            <NestedReplyCard
               key={reply.id}
-              post={{
-                id: reply.id,
-                content: reply.content,
-                authorId: reply.authorId,
-                authorName: reply.authorName || "Unknown",
-                authorEmail: reply.authorEmail,
-                parentPostId: reply.parentPostId,
-                createdAt: new Date(reply.createdAt),
-                likesCount: reply.likesCount,
-                repostsCount: reply.repostsCount,
-                repliesCount: reply.repliesCount,
-                isLiked: reply.isLiked,
-                isReposted: reply.isReposted,
-              }}
+              reply={convertReply(reply)}
               onLike={handleLike}
               onRepost={handleRepost}
               onReply={handleReplyClick}
               onAuthorClick={handleAuthorClick}
-              onPostClick={handlePostClick}
             />
           ))}
 
@@ -511,10 +548,13 @@ export default function PostDetailPage() {
       {/* Compose Reply Dialog */}
       <ComposePost
         open={isComposeOpen}
-        onOpenChange={setIsComposeOpen}
+        onOpenChange={(open) => {
+          setIsComposeOpen(open);
+          if (!open) setReplyTarget(null);
+        }}
         onSubmit={handleComposeReply}
-        parentPostId={postId}
-        parentPostContent={post.content}
+        parentPostId={replyTarget?.id || postId}
+        parentPostContent={replyTarget?.content || post.content}
       />
 
       <AuthRequiredDialog
