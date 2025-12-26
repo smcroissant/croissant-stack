@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { NotificationCard } from "../components/notification-card";
 import { Button } from "@repo/ui/components/button";
-import { Spinner } from "@repo/ui/components/spinner";
 import { Tabs, TabsList, TabsTrigger } from "@repo/ui/components/tabs";
 import { Bell, BellOff, CheckCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -11,107 +10,96 @@ import { useAuth } from "../providers/auth-provider";
 
 interface Notification {
   id: string;
-  type: "like" | "retweet" | "reply" | "follow";
+  type: "like" | "repost" | "reply" | "follow";
   actorId: string;
   actorName: string | null;
   actorEmail: string;
-  tweetId: string | null;
-  tweetContent: string | null;
+  postId: string | null;
+  postContent: string | null;
   isRead: boolean;
   createdAt: Date;
 }
+
+// Fake notifications data
+const FAKE_NOTIFICATIONS: Notification[] = [
+  {
+    id: "1",
+    type: "like",
+    actorId: "user-1",
+    actorName: "John Doe",
+    actorEmail: "john@example.com",
+    postId: "post-1",
+    postContent: "Just shipped a new feature! Check it out.",
+    isRead: false,
+    createdAt: new Date(Date.now() - 1000 * 60 * 5), // 5 minutes ago
+  },
+  {
+    id: "2",
+    type: "repost",
+    actorId: "user-2",
+    actorName: "Jane Smith",
+    actorEmail: "jane@example.com",
+    postId: "post-2",
+    postContent: "Working on something exciting today!",
+    isRead: false,
+    createdAt: new Date(Date.now() - 1000 * 60 * 30), // 30 minutes ago
+  },
+  {
+    id: "3",
+    type: "reply",
+    actorId: "user-3",
+    actorName: "Bob Johnson",
+    actorEmail: "bob@example.com",
+    postId: "post-3",
+    postContent: "Great post! Would love to hear more about this.",
+    isRead: false,
+    createdAt: new Date(Date.now() - 1000 * 60 * 60), // 1 hour ago
+  },
+  {
+    id: "4",
+    type: "follow",
+    actorId: "user-4",
+    actorName: "Alice Williams",
+    actorEmail: "alice@example.com",
+    postId: null,
+    postContent: null,
+    isRead: true,
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 hours ago
+  },
+  {
+    id: "5",
+    type: "like",
+    actorId: "user-5",
+    actorName: "Charlie Brown",
+    actorEmail: "charlie@example.com",
+    postId: "post-4",
+    postContent: "Amazing work on the new design system!",
+    isRead: true,
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24), // 1 day ago
+  },
+];
 
 export default function NotificationsPage() {
   const router = useRouter();
   const { session } = useAuth();
 
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [notifications, setNotifications] = useState<Notification[]>(FAKE_NOTIFICATIONS);
   const [filter, setFilter] = useState<"all" | "unread">("all");
 
-  useEffect(() => {
-    if (session) {
-      loadNotifications();
-    }
-  }, [filter, session]);
-
-  const loadNotifications = async () => {
-    setIsLoading(true);
-    try {
-      const response = await fetch("/api/rpc/notifications.list", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          limit: 50,
-          unreadOnly: filter === "unread",
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to load notifications");
-      }
-
-      const data = await response.json();
-      setNotifications(
-        data.notifications.map((notif: any) => ({
-          ...notif,
-          createdAt: new Date(notif.createdAt),
-        }))
-      );
-    } catch (error) {
-      console.error("Failed to load notifications:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleMarkAsRead = async (notificationId: string) => {
-    try {
-      const response = await fetch("/api/rpc/notifications.markAsRead", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ notificationId }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to mark as read");
-      }
-
-      // Update local state
-      setNotifications((prev) =>
-        prev.map((notif) =>
-          notif.id === notificationId ? { ...notif, isRead: true } : notif
-        )
-      );
-    } catch (error) {
-      console.error("Failed to mark as read:", error);
-    }
+    // Update local state
+    setNotifications((prev) =>
+      prev.map((notif) =>
+        notif.id === notificationId ? { ...notif, isRead: true } : notif
+      )
+    );
   };
 
   const handleMarkAllAsRead = async () => {
-    try {
-      const response = await fetch("/api/rpc/notifications.markAllAsRead", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to mark all as read");
-      }
-
-      // Update local state
-      setNotifications((prev) =>
-        prev.map((notif) => ({ ...notif, isRead: true }))
-      );
-    } catch (error) {
-      console.error("Failed to mark all as read:", error);
-    }
+    // Update local state
+    setNotifications((prev) =>
+      prev.map((notif) => ({ ...notif, isRead: true }))
+    );
   };
 
   const handleNotificationClick = (notification: Notification) => {
@@ -123,8 +111,8 @@ export default function NotificationsPage() {
     // Navigate based on notification type
     if (notification.type === "follow") {
       router.push(`/profile/${notification.actorId}`);
-    } else if (notification.tweetId) {
-      router.push(`/tweet/${notification.tweetId}`);
+    } else if (notification.postId) {
+      router.push(`/post/${notification.postId}`);
     }
   };
 
@@ -145,6 +133,10 @@ export default function NotificationsPage() {
       </div>
     );
   }
+
+  const filteredNotifications = filter === "unread"
+    ? notifications.filter((n) => !n.isRead)
+    : notifications;
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
@@ -191,11 +183,7 @@ export default function NotificationsPage() {
         </div>
       </div>
 
-      {isLoading ? (
-        <div className="flex items-center justify-center p-12">
-          <Spinner />
-        </div>
-      ) : notifications.length === 0 ? (
+      {filteredNotifications.length === 0 ? (
         <div className="flex flex-col items-center justify-center p-12 text-center">
           <BellOff className="w-16 h-16 text-muted-foreground mb-4" />
           <p className="text-muted-foreground mb-2">
@@ -205,12 +193,12 @@ export default function NotificationsPage() {
           </p>
           <p className="text-sm text-muted-foreground">
             {filter === "all" &&
-              "When someone likes, retweets, or replies to your tweets, you'll see it here"}
+              "When someone likes, reposts, or replies to your posts, you'll see it here"}
           </p>
         </div>
       ) : (
         <div className="p-4 space-y-2">
-          {notifications.map((notification) => (
+          {filteredNotifications.map((notification) => (
             <NotificationCard
               key={notification.id}
               notification={notification}

@@ -6,23 +6,23 @@ import { Button } from "@repo/ui/components/button";
 import { Textarea } from "@repo/ui/components/textarea";
 import { Avatar } from "@repo/ui/components/avatar";
 
-interface ComposeTweetProps {
+interface ComposePostProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (content: string, parentTweetId?: string) => Promise<void>;
-  parentTweetId?: string;
-  parentTweetContent?: string;
+  onSubmit: (content: string, parentPostId?: string) => Promise<void>;
+  parentPostId?: string;
+  parentPostContent?: string;
   currentUserName?: string;
 }
 
-export function ComposeTweet({
+export function ComposePost({
   open,
   onOpenChange,
   onSubmit,
-  parentTweetId,
-  parentTweetContent,
+  parentPostId,
+  parentPostContent,
   currentUserName = "You",
-}: ComposeTweetProps) {
+}: ComposePostProps) {
   const [content, setContent] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -31,11 +31,11 @@ export function ComposeTweet({
 
     setIsSubmitting(true);
     try {
-      await onSubmit(content, parentTweetId);
+      await onSubmit(content, parentPostId);
       setContent("");
       onOpenChange(false);
     } catch (error) {
-      console.error("Failed to post tweet:", error);
+      console.error("Failed to create post:", error);
     } finally {
       setIsSubmitting(false);
     }
@@ -49,14 +49,14 @@ export function ComposeTweet({
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
           <DialogTitle>
-            {parentTweetId ? "Reply to Tweet" : "Compose Tweet"}
+            {parentPostId ? "Reply to Post" : "Create Post"}
           </DialogTitle>
         </DialogHeader>
 
-        {parentTweetId && parentTweetContent && (
+        {parentPostId && parentPostContent && (
           <div className="bg-muted/50 p-3 rounded-lg mb-2 text-sm">
             <p className="text-muted-foreground line-clamp-3">
-              {parentTweetContent}
+              {parentPostContent}
             </p>
           </div>
         )}
@@ -71,7 +71,7 @@ export function ComposeTweet({
           <div className="flex-1 space-y-3">
             <Textarea
               placeholder={
-                parentTweetId
+                parentPostId
                   ? "Post your reply"
                   : "What's happening?"
               }
@@ -97,7 +97,7 @@ export function ComposeTweet({
               >
                 {isSubmitting
                   ? "Posting..."
-                  : parentTweetId
+                  : parentPostId
                   ? "Reply"
                   : "Post"}
               </Button>
@@ -108,3 +108,4 @@ export function ComposeTweet({
     </Dialog>
   );
 }
+

@@ -4,87 +4,112 @@ import { z } from "zod";
 // Base contract with shared configuration
 export const contract = oc;
 
-// User-related schemas
-export const userSchema = z.object({
-  id: z.string().uuid(),
-  email: z.string().email(),
-  name: z.string().nullable(),
-  createdAt: z.date(),
+// ============================================
+// Shared Schemas
+// ============================================
+
+export const postSchema = z.object({
+  id: z.string(),
+  content: z.string(),
+  authorId: z.string(),
+  authorName: z.string().nullable(),
+  authorEmail: z.string(),
+  parentPostId: z.string().nullable(),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+  likesCount: z.number(),
+  repostsCount: z.number(),
+  repliesCount: z.number(),
+  isLiked: z.boolean(),
+  isReposted: z.boolean(),
 });
 
-// Planet-related schemas
-export const planetSchema = z.object({
-  id: z.string().uuid(),
+export const postWithEngagementSchema = postSchema.extend({
+  engagementScore: z.number().optional(),
+});
+
+export const hashtagSchema = z.object({
+  id: z.string(),
   name: z.string(),
-  description: z.string().nullable(),
-  diameter: z.number().int().nullable(), // in kilometers
-  mass: z.string().nullable(), // in kg (scientific notation)
-  distanceFromSun: z.string().nullable(), // in million km
-  orbitalPeriod: z.string().nullable(), // in Earth days
-  temperature: z.number().int().nullable(), // average temperature in Celsius
-  moons: z.number().int(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
+  postCount: z.number(),
 });
 
-// Example contract: User routes
-export const userContract = contract.prefix("/api/users").router({
-  // Get all users
+export const notificationSchema = z.object({
+  id: z.string(),
+  type: z.string(),
+  actorId: z.string(),
+  actorName: z.string().nullable(),
+  actorEmail: z.string(),
+  postId: z.string().nullable(),
+  postContent: z.string().nullable(),
+  isRead: z.boolean(),
+  createdAt: z.coerce.date(),
+});
+
+export const userSchema = z.object({
+  id: z.string(),
+  name: z.string().nullable(),
+  email: z.string(),
+  createdAt: z.coerce.date(),
+});
+
+// ============================================
+// Posts Contract
+// ============================================
+
+export const postsContract = contract.router({
   list: contract
-    .route({
-      method: "GET",
-      path: "/",
-    })
-    .output(z.array(userSchema)),
+    .input(
+      z.object({
+        limit: z.number().min(1).max(100).default(20),
+        cursor: z.string().optional(),
+        userId: z.string().optional(),
+        includeReplies: z.boolean().default(true),
+      })
+    )
+    .output(
+      z.object({
+        posts: z.array(postSchema),
+        nextCursor: z.string().optional(),
+      })
+    ),
 
-  // Get user by ID
-  getById: contract
-    .route({
-      method: "GET",
-      path: "/:id",
-    })
+  feed: contract
+    .input(
+      z.object({
+        limit: z.number().min(1).max(100).default(20),
+        cursor: z.string().optional(),
+      })
+    )
+    .output(
+      z.object({
+        posts: z.array(postSchema),
+        nextCursor: z.string().optional(),
+      })
+    ),
+
+  find: contract
     .input(
       z.object({
         id: z.string().uuid(),
       })
     )
-    .output(userSchema),
+    .output(
+      postSchema.extend({
+        replies: z.array(postSchema),
+      })
+    ),
 
-  // Create user
   create: contract
-    .route({
-      method: "POST",
-      path: "/",
-    })
     .input(
       z.object({
-        email: z.string().email(),
-        name: z.string().optional(),
+        content: z.string().min(1).max(280),
+        parentPostId: z.string().uuid().optional(),
       })
     )
-    .output(userSchema),
+    .output(z.any()),
 
-  // Update user
-  update: contract
-    .route({
-      method: "PUT",
-      path: "/:id",
-    })
-    .input(
-      z.object({
-        id: z.string().uuid(),
-        email: z.string().email().optional(),
-        name: z.string().optional(),
-      })
-    )
-    .output(userSchema),
-
-  // Delete user
   delete: contract
-    .route({
-      method: "DELETE",
-      path: "/:id",
-    })
     .input(
       z.object({
         id: z.string().uuid(),
@@ -93,35 +118,202 @@ export const userContract = contract.prefix("/api/users").router({
     .output(z.object({ success: z.boolean() })),
 });
 
-// Planet routes
-export const planetContract = contract.prefix("/api/planets").router({
-  // Get all planets
-  list: contract
-    .route({
-      method: "GET",
-      path: "/",
-    })
-    .output(z.array(planetSchema)),
+// ============================================
+// Likes Contract
+// ============================================
 
-  // Get planet by ID
-  getById: contract
-    .route({
-      method: "GET",
-      path: "/:id",
-    })
+export const likesContract = contract.router({
+  toggle: contract
     .input(
       z.object({
-        id: z.string().uuid(),
+        postId: z.string().uuid(),
       })
     )
-    .output(planetSchema),
+    .output(z.object({ liked: z.boolean() })),
+});
 
-  // Create planet
-  create: contract
-    .route({
-      method: "POST",
-      path: "/",
+// ============================================
+// Reposts Contract
+// ============================================
+
+export const repostsContract = contract.router({
+  toggle: contract
+    .input(
+      z.object({
+        postId: z.string().uuid(),
+      })
+    )
+    .output(z.object({ reposted: z.boolean() })),
+});
+
+// ============================================
+// Follows Contract
+// ============================================
+
+export const followsContract = contract.router({
+  toggle: contract
+    .input(
+      z.object({
+        userId: z.string(),
+      })
+    )
+    .output(z.object({ following: z.boolean() })),
+
+  isFollowing: contract
+    .input(
+      z.object({
+        userId: z.string(),
+      })
+    )
+    .output(z.object({ following: z.boolean() })),
+
+  followers: contract
+    .input(
+      z.object({
+        userId: z.string(),
+        limit: z.number().min(1).max(100).default(20),
+        cursor: z.string().optional(),
+      })
+    )
+    .output(
+      z.object({
+        users: z.array(userSchema),
+        nextCursor: z.string().optional(),
+      })
+    ),
+
+  following: contract
+    .input(
+      z.object({
+        userId: z.string(),
+        limit: z.number().min(1).max(100).default(20),
+        cursor: z.string().optional(),
+      })
+    )
+    .output(
+      z.object({
+        users: z.array(userSchema),
+        nextCursor: z.string().optional(),
+      })
+    ),
+
+  stats: contract
+    .input(
+      z.object({
+        userId: z.string(),
+      })
+    )
+    .output(
+      z.object({
+        followersCount: z.number(),
+        followingCount: z.number(),
+      })
+    ),
+});
+
+// ============================================
+// Trending Contract
+// ============================================
+
+export const trendingContract = contract.router({
+  posts: contract
+    .input(
+      z.object({
+        limit: z.number().min(1).max(50).default(20),
+        timeframe: z.enum(["24h", "7d", "30d"]).default("24h"),
+      })
+    )
+    .output(
+      z.object({
+        posts: z.array(postWithEngagementSchema),
+      })
+    ),
+
+  hashtags: contract
+    .input(
+      z.object({
+        limit: z.number().min(1).max(20).default(10),
+      })
+    )
+    .output(
+      z.object({
+        hashtags: z.array(hashtagSchema),
+      })
+    ),
+
+  postsByHashtag: contract
+    .input(
+      z.object({
+        hashtag: z.string().min(1),
+        limit: z.number().min(1).max(50).default(20),
+      })
+    )
+    .output(
+      z.object({
+        posts: z.array(postSchema),
+      })
+    ),
+});
+
+// ============================================
+// Notifications Contract
+// ============================================
+
+export const notificationsContract = contract.router({
+  list: contract
+    .input(
+      z.object({
+        limit: z.number().min(1).max(100).optional().default(50),
+        unreadOnly: z.boolean().optional().default(false),
+      })
+    )
+    .output(
+      z.object({
+        notifications: z.array(notificationSchema),
+      })
+    ),
+
+  unreadCount: contract.output(
+    z.object({
+      count: z.number(),
     })
+  ),
+
+  markAsRead: contract
+    .input(
+      z.object({
+        notificationId: z.string(),
+      })
+    )
+    .output(z.object({ success: z.boolean() })),
+
+  markAllAsRead: contract.output(z.object({ success: z.boolean() })),
+});
+
+// ============================================
+// Planets Contract (kept for compatibility)
+// ============================================
+
+export const planetSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  description: z.string().nullable(),
+  diameter: z.number().int().nullable(),
+  mass: z.string().nullable(),
+  distanceFromSun: z.string().nullable(),
+  orbitalPeriod: z.string().nullable(),
+  temperature: z.number().int().nullable(),
+  moons: z.number().int(),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+});
+
+export const planetsContract = contract.router({
+  list: contract.output(z.array(planetSchema)),
+  find: contract
+    .input(z.object({ id: z.string().uuid() }))
+    .output(planetSchema.nullable()),
+  create: contract
     .input(
       z.object({
         name: z.string(),
@@ -135,46 +327,20 @@ export const planetContract = contract.prefix("/api/planets").router({
       })
     )
     .output(planetSchema),
-
-  // Update planet
-  update: contract
-    .route({
-      method: "PUT",
-      path: "/:id",
-    })
-    .input(
-      z.object({
-        id: z.string().uuid(),
-        name: z.string().optional(),
-        description: z.string().optional(),
-        diameter: z.number().int().optional(),
-        mass: z.string().optional(),
-        distanceFromSun: z.string().optional(),
-        orbitalPeriod: z.string().optional(),
-        temperature: z.number().int().optional(),
-        moons: z.number().int().optional(),
-      })
-    )
-    .output(planetSchema),
-
-  // Delete planet
-  delete: contract
-    .route({
-      method: "DELETE",
-      path: "/:id",
-    })
-    .input(
-      z.object({
-        id: z.string().uuid(),
-      })
-    )
-    .output(z.object({ success: z.boolean() })),
 });
 
-// Main API contract - compose all route contracts here
+// ============================================
+// Main API Contract
+// ============================================
+
 export const apiContract = contract.router({
-  users: userContract,
-  planets: planetContract,
+  planets: planetsContract,
+  posts: postsContract,
+  likes: likesContract,
+  reposts: repostsContract,
+  follows: followsContract,
+  trending: trendingContract,
+  notifications: notificationsContract,
 });
 
 // Export contract type for use in server and client

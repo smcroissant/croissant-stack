@@ -72,18 +72,30 @@ importers:
 
   apps/admin:
     dependencies:
+      '@orpc/client':
+        specifier: ^1.13.1
+        version: 1.13.1
+      '@orpc/tanstack-query':
+        specifier: ^1.13.1
+        version: 1.13.1(@orpc/client@1.13.1)(@tanstack/query-core@5.90.12)
       '@repo/api':
         specifier: workspace:*
         version: link:../../packages/api
       '@repo/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@repo/contract':
+        specifier: workspace:*
+        version: link:../../packages/contract
       '@repo/db':
         specifier: workspace:*
         version: link:../../packages/db
       '@repo/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@tanstack/react-query':
+        specifier: ^5.90.12
+        version: 5.90.12(react@19.2.2)
       date-fns:
         specifier: ^4.1.0
         version: 4.1.0
@@ -227,8 +239,8 @@ importers:
   packages/contract:
     dependencies:
       '@orpc/contract':
-        specifier: ^1.12.3
-        version: 1.12.3
+        specifier: ^1.13.1
+        version: 1.13.1
     devDependencies:
       '@repo/eslint-config':
         specifier: workspace:*
@@ -1935,8 +1947,14 @@ packages:
   '@orpc/client@1.12.3':
     resolution: {integrity: sha512-Bk0Z1k6Yiny/sRRtvPRIzPi9w2lIGXadtaTdBI6G0qkhTicKYYABi6bnkchKLN+Ud6zOqD8XwZAe/NuZPz32XQ==}
 
+  '@orpc/client@1.13.1':
+    resolution: {integrity: sha512-m0v5HtBrgsq/L5UiPJQGPhpvGaSnoLJByWkH26wottSOEfMCaQHx4eC0q3MVP1Oy35Z8Id1bUXV03V4GsgbVVg==}
+
   '@orpc/contract@1.12.3':
     resolution: {integrity: sha512-WQJ9ljzZ8HRnRiRuDAYyez93nFbOYlTnt4RDDkZxy911mPIC+9e7JYOsgB2TThQCC8ue/crg5LRk46cEqWJYTw==}
+
+  '@orpc/contract@1.13.1':
+    resolution: {integrity: sha512-xITRv7Xy9Kk4Cd/urNv0a3BKBeGo6RcSyWFge53SIke/vEWnlnMXIE5gk3z+fqkWOQ4LvpSKGdJshj9BkfrtbA==}
 
   '@orpc/interop@1.12.3':
     resolution: {integrity: sha512-Qj0EdguHfNtEKO2mbuxLwTh+g+F58NOQz24IJrxLD7oWcBI5tArGeh1Jj2/obG/3VHKlKLtmWfBoQ/8j9kZINQ==}
@@ -1982,14 +2000,23 @@ packages:
   '@orpc/standard-server-fetch@1.12.3':
     resolution: {integrity: sha512-RygTJ5eD5Xx4x9wb5J9YS2qZ6QfIvr7lUqniQjw5+Inrvw8BjRdDwZffOrXRAldO5hu8AydJQceqE2rUEj+mRw==}
 
+  '@orpc/standard-server-fetch@1.13.1':
+    resolution: {integrity: sha512-GQb2NYHFW4psOkRxNn95QGH6s0bmIudVaS9yRgCmxO3ydCVrJFdeNusz+Kd3BniCNyq4ourk2lcqw3cncqYotQ==}
+
   '@orpc/standard-server-node@1.12.3':
     resolution: {integrity: sha512-wGxunFbum4sed0cdN2n2b2+D9u2fQL9aJjzYaVYT+rvobxA9huYglFXe1R9fCJoYrycyO2bhoACgDdRZesBCIA==}
 
   '@orpc/standard-server-peer@1.12.3':
     resolution: {integrity: sha512-woX6hBIM20E2n0RAHZpx06Vxq4zPt7Gtxj2EPeQSvCFS/Wh9MtOgSzGaGcmbuPRssb72xOUcP1bbqoIbAVUZZg==}
 
+  '@orpc/standard-server-peer@1.13.1':
+    resolution: {integrity: sha512-wMxhTL4OjR76Tn+sLN//xj5ByTbwVW5nNJg9BjTbCPdeL0oy+DJk96Jwf402Rz9Yq2NkKuFNUDa1BijMvW7/Kw==}
+
   '@orpc/standard-server@1.12.3':
     resolution: {integrity: sha512-m69mZ0D3u/zCKW0RXWYlPOW+0xqMA8mfHjpdP+B2SwLM2MUPr3P0R0J/RjAyffbja3Dj5QPKpL0xkIyDxELodA==}
+
+  '@orpc/standard-server@1.13.1':
+    resolution: {integrity: sha512-iLv/oGyycXh4xIOG+oBIPwTENqIHVbb9wJMir3a74CSekaA1ErFqiCkRBSjOp/RFahxdGe7fUKAktw56RCWp9Q==}
 
   '@orpc/tanstack-query@1.13.1':
     resolution: {integrity: sha512-Bo4sCMYGqE7pfbsev+8ARZ+Tp7uUniF0yaAI5CkOJdjCPGeQ4fsUQ7LZNc6jWB+//PpycivcfUmknQDoor1MfA==}
@@ -2867,6 +2894,11 @@ packages:
 
   '@tanstack/query-core@5.90.12':
     resolution: {integrity: sha512-T1/8t5DhV/SisWjDnaiU2drl6ySvsHj1bHBCWNXd+/T+Hh1cf6JodyEYMd5sgwm+b/mETT4EV3H+zCVczCU5hg==}
+
+  '@tanstack/react-query@5.90.12':
+    resolution: {integrity: sha512-graRZspg7EoEaw0a8faiUASCyJrqjKPdqJ9EwuDRUF9mEYJ1YPczI9H+/agJ0mOJkPCJDk0lsz5QTrLZ/jQ2rg==}
+    peerDependencies:
+      react: ^18 || ^19
 
   '@tybys/wasm-util@0.10.1':
     resolution: {integrity: sha512-9tTaPJLSiejZKx+Bmog4uSubteqTvFrVrURwkmHixBo0G4seD0zUxp98E1DzUBJxLQ3NPwXrGKDiVjwx/DpPsg==}
@@ -8088,10 +8120,28 @@ snapshots:
     transitivePeerDependencies:
       - '@opentelemetry/api'
 
+  '@orpc/client@1.13.1':
+    dependencies:
+      '@orpc/shared': 1.13.1
+      '@orpc/standard-server': 1.13.1
+      '@orpc/standard-server-fetch': 1.13.1
+      '@orpc/standard-server-peer': 1.13.1
+    transitivePeerDependencies:
+      - '@opentelemetry/api'
+
   '@orpc/contract@1.12.3':
     dependencies:
       '@orpc/client': 1.12.3
       '@orpc/shared': 1.12.3
+      '@standard-schema/spec': 1.0.0
+      openapi-types: 12.1.3
+    transitivePeerDependencies:
+      - '@opentelemetry/api'
+
+  '@orpc/contract@1.13.1':
+    dependencies:
+      '@orpc/client': 1.13.1
+      '@orpc/shared': 1.13.1
       '@standard-schema/spec': 1.0.0
       openapi-types: 12.1.3
     transitivePeerDependencies:
@@ -8152,6 +8202,13 @@ snapshots:
     transitivePeerDependencies:
       - '@opentelemetry/api'
 
+  '@orpc/standard-server-fetch@1.13.1':
+    dependencies:
+      '@orpc/shared': 1.13.1
+      '@orpc/standard-server': 1.13.1
+    transitivePeerDependencies:
+      - '@opentelemetry/api'
+
   '@orpc/standard-server-node@1.12.3':
     dependencies:
       '@orpc/shared': 1.12.3
@@ -8167,15 +8224,36 @@ snapshots:
     transitivePeerDependencies:
       - '@opentelemetry/api'
 
+  '@orpc/standard-server-peer@1.13.1':
+    dependencies:
+      '@orpc/shared': 1.13.1
+      '@orpc/standard-server': 1.13.1
+    transitivePeerDependencies:
+      - '@opentelemetry/api'
+
   '@orpc/standard-server@1.12.3':
     dependencies:
       '@orpc/shared': 1.12.3
     transitivePeerDependencies:
       - '@opentelemetry/api'
 
+  '@orpc/standard-server@1.13.1':
+    dependencies:
+      '@orpc/shared': 1.13.1
+    transitivePeerDependencies:
+      - '@opentelemetry/api'
+
   '@orpc/tanstack-query@1.13.1(@orpc/client@1.12.3)(@tanstack/query-core@5.90.12)':
     dependencies:
       '@orpc/client': 1.12.3
+      '@orpc/shared': 1.13.1
+      '@tanstack/query-core': 5.90.12
+    transitivePeerDependencies:
+      - '@opentelemetry/api'
+
+  '@orpc/tanstack-query@1.13.1(@orpc/client@1.13.1)(@tanstack/query-core@5.90.12)':
+    dependencies:
+      '@orpc/client': 1.13.1
       '@orpc/shared': 1.13.1
       '@tanstack/query-core': 5.90.12
     transitivePeerDependencies:
@@ -9254,6 +9332,11 @@ snapshots:
       tailwindcss: 4.1.18
 
   '@tanstack/query-core@5.90.12': {}
+
+  '@tanstack/react-query@5.90.12(react@19.2.2)':
+    dependencies:
+      '@tanstack/query-core': 5.90.12
+      react: 19.2.2
 
   '@tybys/wasm-util@0.10.1':
     dependencies:

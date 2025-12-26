@@ -7,78 +7,78 @@ import { MessageCircle, Repeat2, Heart, Share } from "lucide-react";
 import { useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 
-interface TweetCardProps {
-  tweet: {
+interface PostCardProps {
+  post: {
     id: string;
     content: string;
     authorId: string;
     authorName: string;
     authorEmail: string;
-    parentTweetId: string | null;
+    parentPostId: string | null;
     createdAt: Date;
     likesCount: number;
-    retweetsCount: number;
+    repostsCount: number;
     repliesCount: number;
     isLiked: boolean;
-    isRetweeted: boolean;
+    isReposted: boolean;
   };
-  onLike?: (tweetId: string) => Promise<void>;
-  onRetweet?: (tweetId: string) => Promise<void>;
-  onReply?: (tweetId: string) => void;
+  onLike?: (postId: string) => Promise<void>;
+  onRepost?: (postId: string) => Promise<void>;
+  onReply?: (postId: string) => void;
   onAuthorClick?: (authorId: string) => void;
 }
 
-export function TweetCard({
-  tweet,
+export function PostCard({
+  post,
   onLike,
-  onRetweet,
+  onRepost,
   onReply,
   onAuthorClick,
-}: TweetCardProps) {
-  const [isLiked, setIsLiked] = useState(tweet.isLiked);
-  const [isRetweeted, setIsRetweeted] = useState(tweet.isRetweeted);
-  const [likesCount, setLikesCount] = useState(tweet.likesCount);
-  const [retweetsCount, setRetweetsCount] = useState(tweet.retweetsCount);
+}: PostCardProps) {
+  const [isLiked, setIsLiked] = useState(post.isLiked);
+  const [isReposted, setIsReposted] = useState(post.isReposted);
+  const [likesCount, setLikesCount] = useState(post.likesCount);
+  const [repostsCount, setRepostsCount] = useState(post.repostsCount);
   const [isLiking, setIsLiking] = useState(false);
-  const [isRetweeting, setIsRetweeting] = useState(false);
+  const [isReposting, setIsReposting] = useState(false);
 
   const handleLike = async () => {
     if (isLiking || !onLike) return;
     setIsLiking(true);
     try {
-      await onLike(tweet.id);
+      await onLike(post.id);
       setIsLiked(!isLiked);
       setLikesCount(isLiked ? likesCount - 1 : likesCount + 1);
     } catch (error) {
-      console.error("Failed to like tweet:", error);
+      console.error("Failed to like post:", error);
     } finally {
       setIsLiking(false);
     }
   };
 
-  const handleRetweet = async () => {
-    if (isRetweeting || !onRetweet) return;
-    setIsRetweeting(true);
+  const handleRepost = async () => {
+    if (isReposting || !onRepost) return;
+    setIsReposting(true);
     try {
-      await onRetweet(tweet.id);
-      setIsRetweeted(!isRetweeted);
-      setRetweetsCount(isRetweeted ? retweetsCount - 1 : retweetsCount + 1);
+      await onRepost(post.id);
+      setIsReposted(!isReposted);
+      setRepostsCount(isReposted ? repostsCount - 1 : repostsCount + 1);
     } catch (error) {
-      console.error("Failed to retweet:", error);
+      console.error("Failed to repost:", error);
     } finally {
-      setIsRetweeting(false);
+      setIsReposting(false);
     }
   };
 
   const handleReply = () => {
     if (onReply) {
-      onReply(tweet.id);
+      onReply(post.id);
     }
   };
 
   const handleAuthorClick = () => {
     if (onAuthorClick) {
-      onAuthorClick(tweet.authorId);
+      onAuthorClick(post.authorId);
     }
   };
 
@@ -90,7 +90,7 @@ export function TweetCard({
           onClick={handleAuthorClick}
         >
           <div className="w-full h-full bg-primary/10 flex items-center justify-center text-sm font-medium">
-            {tweet.authorName?.[0]?.toUpperCase() || "?"}
+            {post.authorName?.[0]?.toUpperCase() || "?"}
           </div>
         </Avatar>
 
@@ -100,20 +100,20 @@ export function TweetCard({
               onClick={handleAuthorClick}
               className="font-semibold hover:underline text-sm"
             >
-              {tweet.authorName || "Unknown"}
+              {post.authorName || "Unknown"}
             </button>
             <span className="text-muted-foreground text-sm">
-              @{tweet.authorEmail?.split("@")[0] || "unknown"}
+              @{post.authorEmail?.split("@")[0] || "unknown"}
             </span>
             <span className="text-muted-foreground text-sm">·</span>
             <span className="text-muted-foreground text-sm">
-              {formatDistanceToNow(new Date(tweet.createdAt), {
+              {formatDistanceToNow(new Date(post.createdAt), {
                 addSuffix: true,
               })}
             </span>
           </div>
 
-          <p className="text-sm whitespace-pre-wrap mb-3">{tweet.content}</p>
+          <p className="text-sm whitespace-pre-wrap mb-3">{post.content}</p>
 
           <div className="flex items-center gap-8">
             <Button
@@ -123,8 +123,8 @@ export function TweetCard({
               onClick={handleReply}
             >
               <MessageCircle className="w-4 h-4" />
-              {tweet.repliesCount > 0 && (
-                <span className="text-xs">{tweet.repliesCount}</span>
+              {post.repliesCount > 0 && (
+                <span className="text-xs">{post.repliesCount}</span>
               )}
             </Button>
 
@@ -132,16 +132,16 @@ export function TweetCard({
               variant="ghost"
               size="sm"
               className={`gap-2 h-8 px-2 ${
-                isRetweeted
+                isReposted
                   ? "text-green-600 hover:text-green-700"
                   : "text-muted-foreground hover:text-green-600"
               }`}
-              onClick={handleRetweet}
-              disabled={isRetweeting}
+              onClick={handleRepost}
+              disabled={isReposting}
             >
               <Repeat2 className="w-4 h-4" />
-              {retweetsCount > 0 && (
-                <span className="text-xs">{retweetsCount}</span>
+              {repostsCount > 0 && (
+                <span className="text-xs">{repostsCount}</span>
               )}
             </Button>
 
@@ -173,3 +173,4 @@ export function TweetCard({
     </Card>
   );
 }
+

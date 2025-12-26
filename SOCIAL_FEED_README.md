@@ -1,18 +1,18 @@
-# Twitter Clone - Setup Guide
+# Social Feed - Setup Guide
 
-A full-featured Twitter-like social media application built with the croissant-stack monorepo.
+A full-featured social media application built with the croissant-stack monorepo.
 
 ## Features
 
 - **Authentication**: Email/password sign up and login with Better Auth
-- **Tweet Posting**: Create tweets up to 280 characters
-- **Interactions**: Like, retweet, and reply to tweets
+- **Post Creation**: Create posts up to 280 characters
+- **Interactions**: Like, repost, and reply to posts
 - **Follow System**: Follow/unfollow users, view followers and following lists
-- **User Profiles**: View user profiles with tweets and stats
+- **User Profiles**: View user profiles with posts and stats
 - **Timeline Feeds**:
-  - **Home Feed** (`/feed`): Shows tweets from users you follow
-  - **Explore Feed** (`/explore`): Shows all tweets from all users
-- **Real-time Updates**: Optimistic UI updates for likes and retweets
+  - **Home Feed** (`/feed`): Shows posts from users you follow
+  - **Explore Feed** (`/explore`): Shows all posts from all users
+- **Real-time Updates**: Optimistic UI updates for likes and reposts
 - **Protected Routes**: Automatic redirect to login for unauthenticated users
 
 ## Tech Stack
@@ -91,23 +91,23 @@ The admin app will be available at [http://localhost:3000](http://localhost:3000
 
 ### Tables Created
 
-1. **tweets**
+1. **posts**
    - `id` (primary key)
    - `content` (text, max 280 chars)
    - `authorId` (foreign key to user)
-   - `parentTweetId` (foreign key to tweets, for replies)
+   - `parentPostId` (foreign key to posts, for replies)
    - `createdAt`, `updatedAt`
 
 2. **likes**
    - `id` (primary key)
    - `userId` (foreign key to user)
-   - `tweetId` (foreign key to tweets)
+   - `postId` (foreign key to posts)
    - `createdAt`
 
-3. **retweets**
+3. **reposts**
    - `id` (primary key)
    - `userId` (foreign key to user)
-   - `tweetId` (foreign key to tweets)
+   - `postId` (foreign key to posts)
    - `createdAt`
 
 4. **follows**
@@ -122,18 +122,18 @@ All tables have proper indexes for optimal query performance.
 
 All API endpoints are available at `/api/rpc/` via oRPC:
 
-### Tweets
-- `tweets.list` - List tweets (with optional userId filter)
-- `tweets.feed` - Get following feed (authenticated)
-- `tweets.find` - Get single tweet with replies
-- `tweets.create` - Create a new tweet (authenticated)
-- `tweets.delete` - Delete a tweet (authenticated)
+### Posts
+- `posts.list` - List posts (with optional userId filter)
+- `posts.feed` - Get following feed (authenticated)
+- `posts.find` - Get single post with replies
+- `posts.create` - Create a new post (authenticated)
+- `posts.delete` - Delete a post (authenticated)
 
 ### Likes
-- `likes.toggle` - Toggle like on a tweet (authenticated)
+- `likes.toggle` - Toggle like on a post (authenticated)
 
-### Retweets
-- `retweets.toggle` - Toggle retweet on a tweet (authenticated)
+### Reposts
+- `reposts.toggle` - Toggle repost on a post (authenticated)
 
 ### Follows
 - `follows.toggle` - Follow/unfollow a user (authenticated)
@@ -148,11 +148,11 @@ All API endpoints are available at `/api/rpc/` via oRPC:
 apps/admin/
 ├── app/
 │   ├── feed/page.tsx          # Home feed (following timeline)
-│   ├── explore/page.tsx       # Explore feed (all tweets)
+│   ├── explore/page.tsx       # Explore feed (all posts)
 │   ├── profile/[userId]/page.tsx  # User profile page
 │   ├── components/
-│   │   ├── tweet-card.tsx     # Tweet display component
-│   │   ├── compose-tweet.tsx  # Tweet composer dialog
+│   │   ├── post-card.tsx      # Post display component
+│   │   ├── compose-post.tsx   # Post composer dialog
 │   │   └── app-sidebar.tsx    # Navigation sidebar
 │   └── api/
 │       └── rpc/[...all]/route.ts  # oRPC API handler
@@ -160,9 +160,9 @@ apps/admin/
 packages/
 ├── api/
 │   └── src/routers/
-│       ├── tweets.ts          # Tweet CRUD operations
+│       ├── posts.ts           # Post CRUD operations
 │       ├── likes.ts           # Like functionality
-│       ├── retweets.ts        # Retweet functionality
+│       ├── reposts.ts         # Repost functionality
 │       └── follows.ts         # Follow system
 ├── db/
 │   └── src/schema.ts          # Database schema definitions
@@ -180,20 +180,20 @@ packages/
    - Click "Sign up" to create a new account
    - Enter your name, email, and password (min 8 characters)
 
-2. **Explore Tweets**: Visit `/explore` to see all tweets
+2. **Explore Posts**: Visit `/explore` to see all posts
 
-3. **Post Your First Tweet**: Click the "Tweet" button to compose
+3. **Create Your First Post**: Click the "Post" button to compose
 
 4. **Follow Users**: Visit user profiles and click "Follow"
 
-5. **View Your Feed**: Go to `/feed` to see tweets from users you follow
+5. **View Your Feed**: Go to `/feed` to see posts from users you follow
 
 6. **Logout**: Click your profile in the sidebar footer and select "Log out"
 
 ### Navigation
 
 - **Home** (`/feed`): Your personalized timeline (users you follow)
-- **Explore** (`/explore`): Discover all tweets
+- **Explore** (`/explore`): Discover all posts
 - **Profile** (`/profile/[userId]`): View any user's profile
 - **Notifications**: Coming soon
 - **Settings**: Coming soon
@@ -253,12 +253,13 @@ If API calls fail:
 - Notifications system
 - Hashtag support
 - Media uploads (images/videos)
-- Tweet search
+- Post search
 - Trending topics
 - User mentions (@username)
 - Bookmarks
-- Tweet analytics
+- Post analytics
 
 ## Contributing
 
 This is a demonstration project for the croissant-stack monorepo. Feel free to extend and customize!
+

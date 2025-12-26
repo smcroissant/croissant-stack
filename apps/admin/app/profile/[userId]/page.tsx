@@ -1,33 +1,111 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { TweetCard } from "../../components/tweet-card";
-import { ComposeTweet } from "../../components/compose-tweet";
+import { useState } from "react";
+import { PostCard } from "../../components/post-card";
+import { ComposePost } from "../../components/compose-post";
 import { Button } from "@repo/ui/components/button";
-import { Spinner } from "@repo/ui/components/spinner";
 import { Avatar } from "@repo/ui/components/avatar";
 import { ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-interface Tweet {
+interface Post {
   id: string;
   content: string;
   authorId: string;
   authorName: string;
   authorEmail: string;
-  parentTweetId: string | null;
+  parentPostId: string | null;
   createdAt: Date;
   likesCount: number;
-  retweetsCount: number;
+  repostsCount: number;
   repliesCount: number;
   isLiked: boolean;
-  isRetweeted: boolean;
+  isReposted: boolean;
 }
 
-interface ProfileStats {
-  followersCount: number;
-  followingCount: number;
-}
+// Fake user profile data
+const FAKE_USER_DATA = {
+  "user-1": {
+    name: "John Doe",
+    email: "john@example.com",
+    followersCount: 150,
+    followingCount: 89,
+    posts: [
+      {
+        id: "post-1",
+        content: "Just shipped a new feature! Really excited about this one.",
+        authorId: "user-1",
+        authorName: "John Doe",
+        authorEmail: "john@example.com",
+        parentPostId: null,
+        createdAt: new Date(Date.now() - 1000 * 60 * 10),
+        likesCount: 5,
+        repostsCount: 2,
+        repliesCount: 1,
+        isLiked: false,
+        isReposted: false,
+      },
+      {
+        id: "post-5",
+        content: "Building something cool with Next.js and TypeScript today!",
+        authorId: "user-1",
+        authorName: "John Doe",
+        authorEmail: "john@example.com",
+        parentPostId: null,
+        createdAt: new Date(Date.now() - 1000 * 60 * 60 * 3),
+        likesCount: 10,
+        repostsCount: 3,
+        repliesCount: 2,
+        isLiked: true,
+        isReposted: false,
+      },
+    ],
+  },
+  "user-2": {
+    name: "Jane Smith",
+    email: "jane@example.com",
+    followersCount: 320,
+    followingCount: 105,
+    posts: [
+      {
+        id: "post-2",
+        content: "Working on something exciting today! Can't wait to share more details soon.",
+        authorId: "user-2",
+        authorName: "Jane Smith",
+        authorEmail: "jane@example.com",
+        parentPostId: null,
+        createdAt: new Date(Date.now() - 1000 * 60 * 30),
+        likesCount: 12,
+        repostsCount: 3,
+        repliesCount: 4,
+        isLiked: true,
+        isReposted: false,
+      },
+    ],
+  },
+  "user-3": {
+    name: "Bob Johnson",
+    email: "bob@example.com",
+    followersCount: 75,
+    followingCount: 52,
+    posts: [
+      {
+        id: "post-3",
+        content: "Great article about TypeScript best practices! Learned a lot from this.",
+        authorId: "user-3",
+        authorName: "Bob Johnson",
+        authorEmail: "bob@example.com",
+        parentPostId: null,
+        createdAt: new Date(Date.now() - 1000 * 60 * 60),
+        likesCount: 8,
+        repostsCount: 5,
+        repliesCount: 2,
+        isLiked: false,
+        isReposted: true,
+      },
+    ],
+  },
+};
 
 export default function ProfilePage({
   params,
@@ -35,190 +113,100 @@ export default function ProfilePage({
   params: { userId: string };
 }) {
   const router = useRouter();
-  const [tweets, setTweets] = useState<Tweet[]>([]);
-  const [stats, setStats] = useState<ProfileStats>({
+  const userId = params.userId;
+
+  const userData = FAKE_USER_DATA[userId as keyof typeof FAKE_USER_DATA] || {
+    name: "Unknown User",
+    email: "unknown@example.com",
     followersCount: 0,
     followingCount: 0,
-  });
+    posts: [],
+  };
+
+  const [posts, setPosts] = useState<Post[]>(userData.posts);
   const [isFollowing, setIsFollowing] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isFollowLoading, setIsFollowLoading] = useState(false);
+  const [stats, setStats] = useState({
+    followersCount: userData.followersCount,
+    followingCount: userData.followingCount,
+  });
   const [isComposeOpen, setIsComposeOpen] = useState(false);
-  const [replyToTweet, setReplyToTweet] = useState<{
+  const [replyToPost, setReplyToPost] = useState<{
     id: string;
     content: string;
   } | null>(null);
 
-  const userId = params.userId;
-
-  useEffect(() => {
-    loadProfile();
-    checkFollowStatus();
-  }, [userId]);
-
-  const loadProfile = async () => {
-    setIsLoading(true);
-    try {
-      const [tweetsResponse, statsResponse] = await Promise.all([
-        fetch("/api/rpc/tweets.list", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ userId, limit: 20, includeReplies: true }),
-        }),
-        fetch("/api/rpc/follows.stats", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ userId }),
-        }),
-      ]);
-
-      if (!tweetsResponse.ok || !statsResponse.ok) {
-        throw new Error("Failed to load profile");
-      }
-
-      const tweetsData = await tweetsResponse.json();
-      const statsData = await statsResponse.json();
-
-      setTweets(
-        tweetsData.tweets.map((tweet: any) => ({
-          ...tweet,
-          createdAt: new Date(tweet.createdAt),
-        }))
-      );
-      setStats(statsData);
-    } catch (error) {
-      console.error("Failed to load profile:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const checkFollowStatus = async () => {
-    try {
-      const response = await fetch("/api/rpc/follows.isFollowing", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ userId }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setIsFollowing(data.following);
-      }
-    } catch (error) {
-      console.error("Failed to check follow status:", error);
-    }
-  };
-
   const handleFollowToggle = async () => {
-    setIsFollowLoading(true);
-    try {
-      const response = await fetch("/api/rpc/follows.toggle", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ userId }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to toggle follow");
-      }
-
-      const data = await response.json();
-      setIsFollowing(data.following);
-      setStats((prev) => ({
-        ...prev,
-        followersCount: data.following
-          ? prev.followersCount + 1
-          : prev.followersCount - 1,
-      }));
-    } catch (error) {
-      console.error("Failed to toggle follow:", error);
-    } finally {
-      setIsFollowLoading(false);
-    }
+    setIsFollowing(!isFollowing);
+    setStats((prev) => ({
+      ...prev,
+      followersCount: isFollowing
+        ? prev.followersCount - 1
+        : prev.followersCount + 1,
+    }));
   };
 
-  const handleComposeTweet = async (
+  const handleComposePost = async (
     content: string,
-    parentTweetId?: string
+    parentPostId?: string
   ) => {
-    try {
-      const response = await fetch("/api/rpc/tweets.create", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ content, parentTweetId }),
-      });
+    const newPost: Post = {
+      id: `post-${Date.now()}`,
+      content,
+      authorId: userId,
+      authorName: userData.name,
+      authorEmail: userData.email,
+      parentPostId: parentPostId || null,
+      createdAt: new Date(),
+      likesCount: 0,
+      repostsCount: 0,
+      repliesCount: 0,
+      isLiked: false,
+      isReposted: false,
+    };
 
-      if (!response.ok) {
-        throw new Error("Failed to create tweet");
-      }
-
-      await loadProfile();
-      setReplyToTweet(null);
-    } catch (error) {
-      console.error("Failed to create tweet:", error);
-      throw error;
-    }
+    setPosts([newPost, ...posts]);
+    setReplyToPost(null);
   };
 
-  const handleLike = async (tweetId: string) => {
-    try {
-      const response = await fetch("/api/rpc/likes.toggle", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ tweetId }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to toggle like");
-      }
-    } catch (error) {
-      console.error("Failed to toggle like:", error);
-      throw error;
-    }
+  const handleLike = async (postId: string) => {
+    setPosts((prev) =>
+      prev.map((post) =>
+        post.id === postId
+          ? {
+              ...post,
+              isLiked: !post.isLiked,
+              likesCount: post.isLiked
+                ? post.likesCount - 1
+                : post.likesCount + 1,
+            }
+          : post
+      )
+    );
   };
 
-  const handleRetweet = async (tweetId: string) => {
-    try {
-      const response = await fetch("/api/rpc/retweets.toggle", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ tweetId }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to toggle retweet");
-      }
-    } catch (error) {
-      console.error("Failed to toggle retweet:", error);
-      throw error;
-    }
+  const handleRepost = async (postId: string) => {
+    setPosts((prev) =>
+      prev.map((post) =>
+        post.id === postId
+          ? {
+              ...post,
+              isReposted: !post.isReposted,
+              repostsCount: post.isReposted
+                ? post.repostsCount - 1
+                : post.repostsCount + 1,
+            }
+          : post
+      )
+    );
   };
 
-  const handleReply = (tweetId: string) => {
-    const tweet = tweets.find((t) => t.id === tweetId);
-    if (tweet) {
-      setReplyToTweet({ id: tweet.id, content: tweet.content });
+  const handleReply = (postId: string) => {
+    const post = posts.find((t) => t.id === postId);
+    if (post) {
+      setReplyToPost({ id: post.id, content: post.content });
       setIsComposeOpen(true);
     }
   };
-
-  const userName = tweets[0]?.authorName || "Unknown User";
-  const userEmail = tweets[0]?.authorEmail || "";
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -233,94 +221,79 @@ export default function ProfilePage({
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <div>
-            <h1 className="text-xl font-bold">{userName}</h1>
+            <h1 className="text-xl font-bold">{userData.name}</h1>
             <p className="text-sm text-muted-foreground">
-              {tweets.length} tweets
+              {posts.length} posts
             </p>
           </div>
         </div>
       </div>
 
-      {isLoading ? (
-        <div className="flex items-center justify-center p-12">
-          <Spinner />
+      <div className="p-6 border-b">
+        <div className="flex items-start justify-between mb-4">
+          <Avatar className="w-20 h-20">
+            <div className="w-full h-full bg-primary/10 flex items-center justify-center text-2xl font-medium">
+              {userData.name[0]?.toUpperCase() || "?"}
+            </div>
+          </Avatar>
+          <Button
+            variant={isFollowing ? "outline" : "default"}
+            size="sm"
+            onClick={handleFollowToggle}
+          >
+            {isFollowing ? "Unfollow" : "Follow"}
+          </Button>
+        </div>
+
+        <div>
+          <h2 className="text-xl font-bold">{userData.name}</h2>
+          <p className="text-muted-foreground">
+            @{userData.email.split("@")[0] || "unknown"}
+          </p>
+        </div>
+
+        <div className="flex gap-6 mt-4">
+          <button className="hover:underline">
+            <span className="font-bold">{stats.followingCount}</span>
+            <span className="text-muted-foreground ml-1">Following</span>
+          </button>
+          <button className="hover:underline">
+            <span className="font-bold">{stats.followersCount}</span>
+            <span className="text-muted-foreground ml-1">Followers</span>
+          </button>
+        </div>
+      </div>
+
+      {posts.length === 0 ? (
+        <div className="flex flex-col items-center justify-center p-12 text-center">
+          <p className="text-muted-foreground">No posts yet</p>
         </div>
       ) : (
-        <>
-          <div className="p-6 border-b">
-            <div className="flex items-start justify-between mb-4">
-              <Avatar className="w-20 h-20">
-                <div className="w-full h-full bg-primary/10 flex items-center justify-center text-2xl font-medium">
-                  {userName[0]?.toUpperCase() || "?"}
-                </div>
-              </Avatar>
-              <Button
-                variant={isFollowing ? "outline" : "default"}
-                size="sm"
-                onClick={handleFollowToggle}
-                disabled={isFollowLoading}
-              >
-                {isFollowLoading
-                  ? "Loading..."
-                  : isFollowing
-                  ? "Unfollow"
-                  : "Follow"}
-              </Button>
-            </div>
-
-            <div>
-              <h2 className="text-xl font-bold">{userName}</h2>
-              <p className="text-muted-foreground">
-                @{userEmail.split("@")[0] || "unknown"}
-              </p>
-            </div>
-
-            <div className="flex gap-6 mt-4">
-              <button className="hover:underline">
-                <span className="font-bold">{stats.followingCount}</span>
-                <span className="text-muted-foreground ml-1">Following</span>
-              </button>
-              <button className="hover:underline">
-                <span className="font-bold">{stats.followersCount}</span>
-                <span className="text-muted-foreground ml-1">Followers</span>
-              </button>
-            </div>
-          </div>
-
-          {tweets.length === 0 ? (
-            <div className="flex flex-col items-center justify-center p-12 text-center">
-              <p className="text-muted-foreground">No tweets yet</p>
-            </div>
-          ) : (
-            <div>
-              {tweets.map((tweet) => (
-                <TweetCard
-                  key={tweet.id}
-                  tweet={tweet}
-                  onLike={handleLike}
-                  onRetweet={handleRetweet}
-                  onReply={handleReply}
-                  onAuthorClick={(authorId) =>
-                    router.push(`/profile/${authorId}`)
-                  }
-                />
-              ))}
-            </div>
-          )}
-        </>
+        <div>
+          {posts.map((post) => (
+            <PostCard
+              key={post.id}
+              post={post}
+              onLike={handleLike}
+              onRepost={handleRepost}
+              onReply={handleReply}
+              onAuthorClick={(authorId) => router.push(`/profile/${authorId}`)}
+            />
+          ))}
+        </div>
       )}
 
-      <ComposeTweet
+      <ComposePost
         open={isComposeOpen}
         onOpenChange={(open) => {
           setIsComposeOpen(open);
           if (!open) {
-            setReplyToTweet(null);
+            setReplyToPost(null);
           }
         }}
-        onSubmit={handleComposeTweet}
-        parentTweetId={replyToTweet?.id}
-        parentTweetContent={replyToTweet?.content}
+        onSubmit={handleComposePost}
+        parentPostId={replyToPost?.id}
+        parentPostContent={replyToPost?.content}
       />
     </div>
   );

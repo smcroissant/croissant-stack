@@ -8,12 +8,12 @@ import { formatDistanceToNow } from "date-fns";
 interface NotificationCardProps {
   notification: {
     id: string;
-    type: "like" | "retweet" | "reply" | "follow";
+    type: "like" | "repost" | "reply" | "follow";
     actorId: string;
     actorName: string | null;
     actorEmail: string;
-    tweetId: string | null;
-    tweetContent: string | null;
+    postId: string | null;
+    postContent: string | null;
     isRead: boolean;
     createdAt: Date;
   };
@@ -30,7 +30,7 @@ export function NotificationCard({
     switch (notification.type) {
       case "like":
         return <Heart className="w-5 h-5 text-red-500 fill-red-500" />;
-      case "retweet":
+      case "repost":
         return <Repeat2 className="w-5 h-5 text-green-500" />;
       case "reply":
         return <MessageCircle className="w-5 h-5 text-blue-500" />;
@@ -45,19 +45,19 @@ export function NotificationCard({
       case "like":
         return (
           <>
-            <span className="font-semibold">{name}</span> liked your tweet
+            <span className="font-semibold">{name}</span> liked your post
           </>
         );
-      case "retweet":
+      case "repost":
         return (
           <>
-            <span className="font-semibold">{name}</span> retweeted your tweet
+            <span className="font-semibold">{name}</span> reposted your post
           </>
         );
       case "reply":
         return (
           <>
-            <span className="font-semibold">{name}</span> replied to your tweet
+            <span className="font-semibold">{name}</span> replied to your post
           </>
         );
       case "follow":
@@ -116,10 +116,10 @@ export function NotificationCard({
                 })}
               </p>
 
-              {notification.tweetContent && (
+              {notification.postContent && (
                 <div className="mt-2 p-2 bg-muted rounded-md">
                   <p className="text-sm text-muted-foreground line-clamp-2">
-                    {notification.tweetContent}
+                    {notification.postContent}
                   </p>
                 </div>
               )}

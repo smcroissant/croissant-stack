@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 interface Hashtag {
   id: string;
   name: string;
-  tweetCount: number;
+  postCount: number;
 }
 
 interface TrendingHashtagsProps {
@@ -52,8 +52,8 @@ export function TrendingHashtags({ hashtags }: TrendingHashtagsProps) {
                     </span>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    {hashtag.tweetCount.toLocaleString()}{" "}
-                    {hashtag.tweetCount === 1 ? "tweet" : "tweets"}
+                    {hashtag.postCount.toLocaleString()}{" "}
+                    {hashtag.postCount === 1 ? "post" : "posts"}
                   </p>
                 </div>
               </div>

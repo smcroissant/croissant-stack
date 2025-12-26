@@ -58,7 +58,7 @@ export default function SignupPage() {
             Create an account
           </CardTitle>
           <CardDescription className="text-center">
-            Enter your details to create your Twitter Clone account
+            Enter your details to create your Social Feed account
           </CardDescription>
         </CardHeader>
         <CardContent>

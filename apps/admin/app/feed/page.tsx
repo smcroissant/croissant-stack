@@ -1,157 +1,174 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { TweetCard } from "../components/tweet-card";
-import { ComposeTweet } from "../components/compose-tweet";
+import { useState } from "react";
+import { PostCard } from "../components/post-card";
+import { ComposePost } from "../components/compose-post";
 import { AuthRequiredDialog } from "../components/auth-required-dialog";
 import { Button } from "@repo/ui/components/button";
-import { Spinner } from "@repo/ui/components/spinner";
-import { Separator } from "@repo/ui/components/separator";
 import { Feather } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../providers/auth-provider";
 
-interface Tweet {
+interface Post {
   id: string;
   content: string;
   authorId: string;
   authorName: string;
   authorEmail: string;
-  parentTweetId: string | null;
+  parentPostId: string | null;
   createdAt: Date;
   likesCount: number;
-  retweetsCount: number;
+  repostsCount: number;
   repliesCount: number;
   isLiked: boolean;
-  isRetweeted: boolean;
+  isReposted: boolean;
 }
+
+// Fake posts data
+const FAKE_POSTS: Post[] = [
+  {
+    id: "post-1",
+    content: "Just shipped a new feature! Really excited about this one.",
+    authorId: "user-1",
+    authorName: "John Doe",
+    authorEmail: "john@example.com",
+    parentPostId: null,
+    createdAt: new Date(Date.now() - 1000 * 60 * 10), // 10 minutes ago
+    likesCount: 5,
+    repostsCount: 2,
+    repliesCount: 1,
+    isLiked: false,
+    isReposted: false,
+  },
+  {
+    id: "post-2",
+    content: "Working on something exciting today! Can't wait to share more details soon.",
+    authorId: "user-2",
+    authorName: "Jane Smith",
+    authorEmail: "jane@example.com",
+    parentPostId: null,
+    createdAt: new Date(Date.now() - 1000 * 60 * 30), // 30 minutes ago
+    likesCount: 12,
+    repostsCount: 3,
+    repliesCount: 4,
+    isLiked: true,
+    isReposted: false,
+  },
+  {
+    id: "post-3",
+    content: "Great article about TypeScript best practices! Learned a lot from this.",
+    authorId: "user-3",
+    authorName: "Bob Johnson",
+    authorEmail: "bob@example.com",
+    parentPostId: null,
+    createdAt: new Date(Date.now() - 1000 * 60 * 60), // 1 hour ago
+    likesCount: 8,
+    repostsCount: 5,
+    repliesCount: 2,
+    isLiked: false,
+    isReposted: true,
+  },
+  {
+    id: "post-4",
+    content: "The weather today is amazing! Perfect day for a walk in the park.",
+    authorId: "user-4",
+    authorName: "Alice Williams",
+    authorEmail: "alice@example.com",
+    parentPostId: null,
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 hours ago
+    likesCount: 3,
+    repostsCount: 0,
+    repliesCount: 1,
+    isLiked: false,
+    isReposted: false,
+  },
+];
 
 export default function FeedPage() {
   const router = useRouter();
   const { session } = useAuth();
-  const [tweets, setTweets] = useState<Tweet[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [posts, setPosts] = useState<Post[]>(FAKE_POSTS);
   const [isComposeOpen, setIsComposeOpen] = useState(false);
   const [showAuthRequired, setShowAuthRequired] = useState(false);
-  const [replyToTweet, setReplyToTweet] = useState<{
+  const [replyToPost, setReplyToPost] = useState<{
     id: string;
     content: string;
   } | null>(null);
 
-  useEffect(() => {
-    loadFeed();
-  }, []);
-
-  const loadFeed = async () => {
-    setIsLoading(true);
-    try {
-      const response = await fetch("/api/rpc/tweets.feed", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ limit: 20 }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to load feed");
-      }
-
-      const data = await response.json();
-      setTweets(
-        data.tweets.map((tweet: any) => ({
-          ...tweet,
-          createdAt: new Date(tweet.createdAt),
-        }))
-      );
-    } catch (error) {
-      console.error("Failed to load feed:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleComposeTweet = async (
+  const handleComposePost = async (
     content: string,
-    parentTweetId?: string
+    parentPostId?: string
   ) => {
-    try {
-      const response = await fetch("/api/rpc/tweets.create", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ content, parentTweetId }),
-      });
+    // Simulate creating a post
+    const newPost: Post = {
+      id: `post-${Date.now()}`,
+      content,
+      authorId: session?.user.id || "current-user",
+      authorName: session?.user.name || "Current User",
+      authorEmail: session?.user.email || "user@example.com",
+      parentPostId: parentPostId || null,
+      createdAt: new Date(),
+      likesCount: 0,
+      repostsCount: 0,
+      repliesCount: 0,
+      isLiked: false,
+      isReposted: false,
+    };
 
-      if (!response.ok) {
-        throw new Error("Failed to create tweet");
-      }
-
-      await loadFeed();
-      setReplyToTweet(null);
-    } catch (error) {
-      console.error("Failed to create tweet:", error);
-      throw error;
-    }
+    setPosts([newPost, ...posts]);
+    setReplyToPost(null);
   };
 
-  const handleLike = async (tweetId: string) => {
-    try {
-      const response = await fetch("/api/rpc/likes.toggle", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ tweetId }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to toggle like");
-      }
-    } catch (error) {
-      console.error("Failed to toggle like:", error);
-      throw error;
-    }
+  const handleLike = async (postId: string) => {
+    setPosts((prev) =>
+      prev.map((post) =>
+        post.id === postId
+          ? {
+              ...post,
+              isLiked: !post.isLiked,
+              likesCount: post.isLiked
+                ? post.likesCount - 1
+                : post.likesCount + 1,
+            }
+          : post
+      )
+    );
   };
 
-  const handleRetweet = async (tweetId: string) => {
-    try {
-      const response = await fetch("/api/rpc/retweets.toggle", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ tweetId }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to toggle retweet");
-      }
-    } catch (error) {
-      console.error("Failed to toggle retweet:", error);
-      throw error;
-    }
+  const handleRepost = async (postId: string) => {
+    setPosts((prev) =>
+      prev.map((post) =>
+        post.id === postId
+          ? {
+              ...post,
+              isReposted: !post.isReposted,
+              repostsCount: post.isReposted
+                ? post.repostsCount - 1
+                : post.repostsCount + 1,
+            }
+          : post
+      )
+    );
   };
 
-  const handleReply = (tweetId: string) => {
+  const handleReply = (postId: string) => {
     if (!session) {
       setShowAuthRequired(true);
       return;
     }
-    const tweet = tweets.find((t) => t.id === tweetId);
-    if (tweet) {
-      setReplyToTweet({ id: tweet.id, content: tweet.content });
+    const post = posts.find((t) => t.id === postId);
+    if (post) {
+      setReplyToPost({ id: post.id, content: post.content });
       setIsComposeOpen(true);
     }
   };
 
-  const handleTweetClick = () => {
+  const handlePostClick = () => {
     if (!session) {
       setShowAuthRequired(true);
       return;
     }
-    setReplyToTweet(null);
+    setReplyToPost(null);
     setIsComposeOpen(true);
   };
 
@@ -164,38 +181,28 @@ export default function FeedPage() {
       <div className="sticky top-0 bg-background/80 backdrop-blur-sm z-10 border-b">
         <div className="flex items-center justify-between p-4">
           <h1 className="text-xl font-bold">Home</h1>
-          <Button
-            size="sm"
-            className="gap-2"
-            onClick={handleTweetClick}
-          >
+          <Button size="sm" className="gap-2" onClick={handlePostClick}>
             <Feather className="w-4 h-4" />
-            Tweet
+            Post
           </Button>
         </div>
       </div>
 
-      {isLoading ? (
-        <div className="flex items-center justify-center p-12">
-          <Spinner />
-        </div>
-      ) : tweets.length === 0 ? (
+      {posts.length === 0 ? (
         <div className="flex flex-col items-center justify-center p-12 text-center">
           <p className="text-muted-foreground mb-4">
-            Your feed is empty. Follow some users to see their tweets here.
+            Your feed is empty. Follow some users to see their posts here.
           </p>
-          <Button onClick={handleTweetClick}>
-            Post your first tweet
-          </Button>
+          <Button onClick={handlePostClick}>Create your first post</Button>
         </div>
       ) : (
         <div>
-          {tweets.map((tweet) => (
-            <TweetCard
-              key={tweet.id}
-              tweet={tweet}
+          {posts.map((post) => (
+            <PostCard
+              key={post.id}
+              post={post}
               onLike={handleLike}
-              onRetweet={handleRetweet}
+              onRepost={handleRepost}
               onReply={handleReply}
               onAuthorClick={handleAuthorClick}
             />
@@ -203,17 +210,17 @@ export default function FeedPage() {
         </div>
       )}
 
-      <ComposeTweet
+      <ComposePost
         open={isComposeOpen}
         onOpenChange={(open) => {
           setIsComposeOpen(open);
           if (!open) {
-            setReplyToTweet(null);
+            setReplyToPost(null);
           }
         }}
-        onSubmit={handleComposeTweet}
-        parentTweetId={replyToTweet?.id}
-        parentTweetContent={replyToTweet?.content}
+        onSubmit={handleComposePost}
+        parentPostId={replyToPost?.id}
+        parentPostContent={replyToPost?.content}
       />
 
       <AuthRequiredDialog

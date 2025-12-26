@@ -10,40 +10,40 @@ export const planets = pgTable("planets", {
   updatedAt: timestamp("updated_at").defaultNow().$onUpdate(() => new Date()).notNull(),
 });
 
-// Tweets table
-export const tweets = pgTable("tweets", {
+// Posts table
+export const posts = pgTable("posts", {
   id: text("id").primaryKey(),
   content: text("content").notNull(),
   authorId: text("author_id").notNull().references(() => user.id, { onDelete: "cascade" }),
-  parentTweetId: text("parent_tweet_id"), // For replies
+  parentPostId: text("parent_post_id"), // For replies
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().$onUpdate(() => new Date()).notNull(),
 }, (table) => [
-  index("tweets_author_idx").on(table.authorId),
-  index("tweets_parent_idx").on(table.parentTweetId),
-  index("tweets_created_at_idx").on(table.createdAt),
+  index("posts_author_idx").on(table.authorId),
+  index("posts_parent_idx").on(table.parentPostId),
+  index("posts_created_at_idx").on(table.createdAt),
 ]);
 
 // Likes table
 export const likes = pgTable("likes", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
-  tweetId: text("tweet_id").notNull().references(() => tweets.id, { onDelete: "cascade" }),
+  postId: text("post_id").notNull().references(() => posts.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
-  index("likes_user_tweet_idx").on(table.userId, table.tweetId),
-  index("likes_tweet_idx").on(table.tweetId),
+  index("likes_user_post_idx").on(table.userId, table.postId),
+  index("likes_post_idx").on(table.postId),
 ]);
 
-// Retweets table
-export const retweets = pgTable("retweets", {
+// Reposts table
+export const reposts = pgTable("reposts", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
-  tweetId: text("tweet_id").notNull().references(() => tweets.id, { onDelete: "cascade" }),
+  postId: text("post_id").notNull().references(() => posts.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
-  index("retweets_user_tweet_idx").on(table.userId, table.tweetId),
-  index("retweets_tweet_idx").on(table.tweetId),
+  index("reposts_user_post_idx").on(table.userId, table.postId),
+  index("reposts_post_idx").on(table.postId),
 ]);
 
 // Follows table
@@ -58,21 +58,21 @@ export const follows = pgTable("follows", {
 ]);
 
 // Relations
-export const tweetsRelations = relations(tweets, ({ one, many }) => ({
+export const postsRelations = relations(posts, ({ one, many }) => ({
   author: one(user, {
-    fields: [tweets.authorId],
+    fields: [posts.authorId],
     references: [user.id],
   }),
-  parentTweet: one(tweets, {
-    fields: [tweets.parentTweetId],
-    references: [tweets.id],
+  parentPost: one(posts, {
+    fields: [posts.parentPostId],
+    references: [posts.id],
     relationName: "replies",
   }),
-  replies: many(tweets, {
+  replies: many(posts, {
     relationName: "replies",
   }),
   likes: many(likes),
-  retweets: many(retweets),
+  reposts: many(reposts),
 }));
 
 export const likesRelations = relations(likes, ({ one }) => ({
@@ -80,20 +80,20 @@ export const likesRelations = relations(likes, ({ one }) => ({
     fields: [likes.userId],
     references: [user.id],
   }),
-  tweet: one(tweets, {
-    fields: [likes.tweetId],
-    references: [tweets.id],
+  post: one(posts, {
+    fields: [likes.postId],
+    references: [posts.id],
   }),
 }));
 
-export const retweetsRelations = relations(retweets, ({ one }) => ({
+export const repostsRelations = relations(reposts, ({ one }) => ({
   user: one(user, {
-    fields: [retweets.userId],
+    fields: [reposts.userId],
     references: [user.id],
   }),
-  tweet: one(tweets, {
-    fields: [retweets.tweetId],
-    references: [tweets.id],
+  post: one(posts, {
+    fields: [reposts.postId],
+    references: [posts.id],
   }),
 }));
 
@@ -111,9 +111,9 @@ export const followsRelations = relations(follows, ({ one }) => ({
 }));
 
 export const extendedUserRelations = relations(user, ({ many }) => ({
-  tweets: many(tweets),
+  posts: many(posts),
   likes: many(likes),
-  retweets: many(retweets),
+  reposts: many(reposts),
   followers: many(follows, { relationName: "followers" }),
   following: many(follows, { relationName: "following" }),
 }));
@@ -122,9 +122,9 @@ export const extendedUserRelations = relations(user, ({ many }) => ({
 export const notifications = pgTable("notifications", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
-  type: text("type").notNull(), // 'like', 'retweet', 'reply', 'follow'
+  type: text("type").notNull(), // 'like', 'repost', 'reply', 'follow'
   actorId: text("actor_id").notNull().references(() => user.id, { onDelete: "cascade" }),
-  tweetId: text("tweet_id").references(() => tweets.id, { onDelete: "cascade" }), // nullable for follow notifications
+  postId: text("post_id").references(() => posts.id, { onDelete: "cascade" }), // nullable for follow notifications
   isRead: boolean("is_read").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
@@ -144,9 +144,9 @@ export const notificationsRelations = relations(notifications, ({ one }) => ({
     references: [user.id],
     relationName: "notificationActor",
   }),
-  tweet: one(tweets, {
-    fields: [notifications.tweetId],
-    references: [tweets.id],
+  post: one(posts, {
+    fields: [notifications.postId],
+    references: [posts.id],
   }),
 }));
 
@@ -154,35 +154,35 @@ export const notificationsRelations = relations(notifications, ({ one }) => ({
 export const hashtags = pgTable("hashtags", {
   id: text("id").primaryKey(),
   name: text("name").notNull().unique(),
-  tweetCount: text("tweet_count").notNull().default("0"),
+  postCount: text("post_count").notNull().default("0"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().$onUpdate(() => new Date()).notNull(),
 }, (table) => [
   index("hashtags_name_idx").on(table.name),
 ]);
 
-// Tweet hashtags junction table
-export const tweetHashtags = pgTable("tweet_hashtags", {
+// Post hashtags junction table
+export const postHashtags = pgTable("post_hashtags", {
   id: text("id").primaryKey(),
-  tweetId: text("tweet_id").notNull().references(() => tweets.id, { onDelete: "cascade" }),
+  postId: text("post_id").notNull().references(() => posts.id, { onDelete: "cascade" }),
   hashtagId: text("hashtag_id").notNull().references(() => hashtags.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
-  index("tweet_hashtags_tweet_hashtag_idx").on(table.tweetId, table.hashtagId),
-  index("tweet_hashtags_hashtag_idx").on(table.hashtagId),
+  index("post_hashtags_post_hashtag_idx").on(table.postId, table.hashtagId),
+  index("post_hashtags_hashtag_idx").on(table.hashtagId),
 ]);
 
 export const hashtagsRelations = relations(hashtags, ({ many }) => ({
-  tweetHashtags: many(tweetHashtags),
+  postHashtags: many(postHashtags),
 }));
 
-export const tweetHashtagsRelations = relations(tweetHashtags, ({ one }) => ({
-  tweet: one(tweets, {
-    fields: [tweetHashtags.tweetId],
-    references: [tweets.id],
+export const postHashtagsRelations = relations(postHashtags, ({ one }) => ({
+  post: one(posts, {
+    fields: [postHashtags.postId],
+    references: [posts.id],
   }),
   hashtag: one(hashtags, {
-    fields: [tweetHashtags.hashtagId],
+    fields: [postHashtags.hashtagId],
     references: [hashtags.id],
   }),
 }));
@@ -195,12 +195,12 @@ export const schema = {
   sessionRelations,
   accountRelations,
   userRelations,
-  tweets,
-  tweetsRelations,
+  posts,
+  postsRelations,
   likes,
   likesRelations,
-  retweets,
-  retweetsRelations,
+  reposts,
+  repostsRelations,
   follows,
   followsRelations,
   extendedUserRelations,
@@ -208,6 +208,6 @@ export const schema = {
   notificationsRelations,
   hashtags,
   hashtagsRelations,
-  tweetHashtags,
-  tweetHashtagsRelations,
+  postHashtags,
+  postHashtagsRelations,
 }

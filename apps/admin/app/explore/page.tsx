@@ -1,220 +1,213 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { TweetCard } from "../components/tweet-card";
-import { ComposeTweet } from "../components/compose-tweet";
+import { useState } from "react";
+import { PostCard } from "../components/post-card";
+import { ComposePost } from "../components/compose-post";
 import { AuthRequiredDialog } from "../components/auth-required-dialog";
 import { TrendingHashtags } from "../components/trending-hashtags";
 import { Button } from "@repo/ui/components/button";
-import { Spinner } from "@repo/ui/components/spinner";
 import { Tabs, TabsList, TabsTrigger } from "@repo/ui/components/tabs";
 import { Feather, TrendingUp, Clock, Flame } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "../providers/auth-provider";
 
-interface Tweet {
+interface Post {
   id: string;
   content: string;
   authorId: string;
   authorName: string;
   authorEmail: string;
-  parentTweetId: string | null;
+  parentPostId: string | null;
   createdAt: Date;
   likesCount: number;
-  retweetsCount: number;
+  repostsCount: number;
   repliesCount: number;
   isLiked: boolean;
-  isRetweeted: boolean;
+  isReposted: boolean;
   engagementScore?: number;
 }
 
 interface Hashtag {
   id: string;
   name: string;
-  tweetCount: number;
+  postCount: number;
 }
+
+// Fake trending posts
+const FAKE_TRENDING_POSTS: Post[] = [
+  {
+    id: "trending-1",
+    content: "This new framework is absolutely amazing! #webdev #javascript",
+    authorId: "user-1",
+    authorName: "John Doe",
+    authorEmail: "john@example.com",
+    parentPostId: null,
+    createdAt: new Date(Date.now() - 1000 * 60 * 15),
+    likesCount: 42,
+    repostsCount: 18,
+    repliesCount: 5,
+    isLiked: false,
+    isReposted: false,
+    engagementScore: 78, // 42*1 + 18*2
+  },
+  {
+    id: "trending-2",
+    content: "Just launched our new product! Check it out #startup #tech",
+    authorId: "user-2",
+    authorName: "Jane Smith",
+    authorEmail: "jane@example.com",
+    parentPostId: null,
+    createdAt: new Date(Date.now() - 1000 * 60 * 45),
+    likesCount: 38,
+    repostsCount: 15,
+    repliesCount: 8,
+    isLiked: true,
+    isReposted: false,
+    engagementScore: 68,
+  },
+  {
+    id: "trending-3",
+    content: "Great tips for improving React performance #react #optimization",
+    authorId: "user-3",
+    authorName: "Bob Johnson",
+    authorEmail: "bob@example.com",
+    parentPostId: null,
+    createdAt: new Date(Date.now() - 1000 * 60 * 90),
+    likesCount: 35,
+    repostsCount: 12,
+    repliesCount: 6,
+    isLiked: false,
+    isReposted: true,
+    engagementScore: 59,
+  },
+  {
+    id: "trending-4",
+    content: "Beautiful sunset today! Nature never disappoints #photography",
+    authorId: "user-4",
+    authorName: "Alice Williams",
+    authorEmail: "alice@example.com",
+    parentPostId: null,
+    createdAt: new Date(Date.now() - 1000 * 60 * 120),
+    likesCount: 28,
+    repostsCount: 10,
+    repliesCount: 3,
+    isLiked: false,
+    isReposted: false,
+    engagementScore: 48,
+  },
+];
+
+// Fake hashtags
+const FAKE_HASHTAGS: Hashtag[] = [
+  { id: "1", name: "webdev", postCount: 1250 },
+  { id: "2", name: "javascript", postCount: 980 },
+  { id: "3", name: "react", postCount: 850 },
+  { id: "4", name: "typescript", postCount: 720 },
+  { id: "5", name: "startup", postCount: 650 },
+  { id: "6", name: "tech", postCount: 580 },
+  { id: "7", name: "programming", postCount: 520 },
+  { id: "8", name: "design", postCount: 450 },
+  { id: "9", name: "ai", postCount: 420 },
+  { id: "10", name: "nextjs", postCount: 380 },
+];
 
 export default function ExplorePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { session } = useAuth();
 
-  const [tweets, setTweets] = useState<Tweet[]>([]);
-  const [hashtags, setHashtags] = useState<Hashtag[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [posts, setPosts] = useState<Post[]>(FAKE_TRENDING_POSTS);
+  const [hashtags] = useState<Hashtag[]>(FAKE_HASHTAGS);
   const [isComposeOpen, setIsComposeOpen] = useState(false);
   const [showAuthRequired, setShowAuthRequired] = useState(false);
   const [timeframe, setTimeframe] = useState<"24h" | "7d" | "30d">("24h");
-  const [replyToTweet, setReplyToTweet] = useState<{
+  const [replyToPost, setReplyToPost] = useState<{
     id: string;
     content: string;
   } | null>(null);
 
   const hashtagParam = searchParams?.get("hashtag");
 
-  useEffect(() => {
-    if (hashtagParam) {
-      loadHashtagTweets(hashtagParam);
-    } else {
-      loadTrendingContent();
-    }
-  }, [timeframe, hashtagParam]);
+  // Filter posts by hashtag if param exists
+  const filteredPosts = hashtagParam
+    ? posts.filter((post) =>
+        post.content.toLowerCase().includes(`#${hashtagParam.toLowerCase()}`)
+      )
+    : posts;
 
-  const loadTrendingContent = async () => {
-    setIsLoading(true);
-    try {
-      const [tweetsResponse, hashtagsResponse] = await Promise.all([
-        fetch("/api/rpc/trending.tweets", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ limit: 30, timeframe }),
-        }),
-        fetch("/api/rpc/trending.hashtags", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ limit: 10 }),
-        }),
-      ]);
-
-      if (!tweetsResponse.ok || !hashtagsResponse.ok) {
-        throw new Error("Failed to load trending content");
-      }
-
-      const tweetsData = await tweetsResponse.json();
-      const hashtagsData = await hashtagsResponse.json();
-
-      setTweets(
-        tweetsData.tweets.map((tweet: any) => ({
-          ...tweet,
-          createdAt: new Date(tweet.createdAt),
-        }))
-      );
-      setHashtags(hashtagsData.hashtags);
-    } catch (error) {
-      console.error("Failed to load trending content:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const loadHashtagTweets = async (hashtag: string) => {
-    setIsLoading(true);
-    try {
-      const response = await fetch("/api/rpc/trending.tweetsByHashtag", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ hashtag, limit: 50 }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to load hashtag tweets");
-      }
-
-      const data = await response.json();
-      setTweets(
-        data.tweets.map((tweet: any) => ({
-          ...tweet,
-          createdAt: new Date(tweet.createdAt),
-        }))
-      );
-    } catch (error) {
-      console.error("Failed to load hashtag tweets:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleComposeTweet = async (
+  const handleComposePost = async (
     content: string,
-    parentTweetId?: string
+    parentPostId?: string
   ) => {
-    try {
-      const response = await fetch("/api/rpc/tweets.create", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ content, parentTweetId }),
-      });
+    const newPost: Post = {
+      id: `post-${Date.now()}`,
+      content,
+      authorId: session?.user.id || "current-user",
+      authorName: session?.user.name || "Current User",
+      authorEmail: session?.user.email || "user@example.com",
+      parentPostId: parentPostId || null,
+      createdAt: new Date(),
+      likesCount: 0,
+      repostsCount: 0,
+      repliesCount: 0,
+      isLiked: false,
+      isReposted: false,
+    };
 
-      if (!response.ok) {
-        throw new Error("Failed to create tweet");
-      }
-
-      if (hashtagParam) {
-        await loadHashtagTweets(hashtagParam);
-      } else {
-        await loadTrendingContent();
-      }
-      setReplyToTweet(null);
-    } catch (error) {
-      console.error("Failed to create tweet:", error);
-      throw error;
-    }
+    setPosts([newPost, ...posts]);
+    setReplyToPost(null);
   };
 
-  const handleLike = async (tweetId: string) => {
-    try {
-      const response = await fetch("/api/rpc/likes.toggle", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ tweetId }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to toggle like");
-      }
-    } catch (error) {
-      console.error("Failed to toggle like:", error);
-      throw error;
-    }
+  const handleLike = async (postId: string) => {
+    setPosts((prev) =>
+      prev.map((post) =>
+        post.id === postId
+          ? {
+              ...post,
+              isLiked: !post.isLiked,
+              likesCount: post.isLiked
+                ? post.likesCount - 1
+                : post.likesCount + 1,
+            }
+          : post
+      )
+    );
   };
 
-  const handleRetweet = async (tweetId: string) => {
-    try {
-      const response = await fetch("/api/rpc/retweets.toggle", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ tweetId }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to toggle retweet");
-      }
-    } catch (error) {
-      console.error("Failed to toggle retweet:", error);
-      throw error;
-    }
+  const handleRepost = async (postId: string) => {
+    setPosts((prev) =>
+      prev.map((post) =>
+        post.id === postId
+          ? {
+              ...post,
+              isReposted: !post.isReposted,
+              repostsCount: post.isReposted
+                ? post.repostsCount - 1
+                : post.repostsCount + 1,
+            }
+          : post
+      )
+    );
   };
 
-  const handleReply = (tweetId: string) => {
+  const handleReply = (postId: string) => {
     if (!session) {
       setShowAuthRequired(true);
       return;
     }
-    const tweet = tweets.find((t) => t.id === tweetId);
-    if (tweet) {
-      setReplyToTweet({ id: tweet.id, content: tweet.content });
+    const post = posts.find((t) => t.id === postId);
+    if (post) {
+      setReplyToPost({ id: post.id, content: post.content });
       setIsComposeOpen(true);
     }
   };
 
-  const handleTweetClick = () => {
+  const handlePostClick = () => {
     if (!session) {
       setShowAuthRequired(true);
       return;
     }
-    setReplyToTweet(null);
+    setReplyToPost(null);
     setIsComposeOpen(true);
   };
 
@@ -234,9 +227,9 @@ export default function ExplorePage() {
             <Flame className="w-6 h-6 text-orange-500" />
             {hashtagParam ? `#${hashtagParam}` : "Trending"}
           </h1>
-          <Button size="sm" className="gap-2" onClick={handleTweetClick}>
+          <Button size="sm" className="gap-2" onClick={handlePostClick}>
             <Feather className="w-4 h-4" />
-            Tweet
+            Post
           </Button>
         </div>
 
@@ -275,33 +268,29 @@ export default function ExplorePage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 p-4">
         <div className="lg:col-span-2">
-          {isLoading ? (
-            <div className="flex items-center justify-center p-12">
-              <Spinner />
-            </div>
-          ) : tweets.length === 0 ? (
+          {filteredPosts.length === 0 ? (
             <div className="flex flex-col items-center justify-center p-12 text-center">
               <p className="text-muted-foreground mb-4">
                 {hashtagParam
-                  ? `No tweets found for #${hashtagParam}`
-                  : "No trending tweets yet"}
+                  ? `No posts found for #${hashtagParam}`
+                  : "No trending posts yet"}
               </p>
-              <Button onClick={handleTweetClick}>Post the first tweet</Button>
+              <Button onClick={handlePostClick}>Create the first post</Button>
             </div>
           ) : (
             <div className="space-y-0">
-              {tweets.map((tweet, index) => (
-                <div key={tweet.id} className="relative">
-                  {tweet.engagementScore !== undefined && (
+              {filteredPosts.map((post, index) => (
+                <div key={post.id} className="relative">
+                  {post.engagementScore !== undefined && !hashtagParam && (
                     <div className="absolute left-0 top-4 bg-orange-500 text-white px-2 py-1 rounded-r-md text-xs font-bold flex items-center gap-1 z-10">
                       <Flame className="w-3 h-3" />
                       #{index + 1}
                     </div>
                   )}
-                  <TweetCard
-                    tweet={tweet}
+                  <PostCard
+                    post={post}
                     onLike={handleLike}
-                    onRetweet={handleRetweet}
+                    onRepost={handleRepost}
                     onReply={handleReply}
                     onAuthorClick={handleAuthorClick}
                   />
@@ -320,17 +309,17 @@ export default function ExplorePage() {
         )}
       </div>
 
-      <ComposeTweet
+      <ComposePost
         open={isComposeOpen}
         onOpenChange={(open) => {
           setIsComposeOpen(open);
           if (!open) {
-            setReplyToTweet(null);
+            setReplyToPost(null);
           }
         }}
-        onSubmit={handleComposeTweet}
-        parentTweetId={replyToTweet?.id}
-        parentTweetContent={replyToTweet?.content}
+        onSubmit={handleComposePost}
+        parentPostId={replyToPost?.id}
+        parentPostContent={replyToPost?.content}
       />
 
       <AuthRequiredDialog

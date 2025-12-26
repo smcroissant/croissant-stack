@@ -1,17 +1,17 @@
 import { planetsRouter } from "./routers/planets";
-import { tweetsRouter } from "./routers/tweets";
+import { postsRouter } from "./routers/posts";
 import { likesRouter } from "./routers/likes";
-import { retweetsRouter } from "./routers/retweets";
+import { repostsRouter } from "./routers/reposts";
 import { followsRouter } from "./routers/follows";
 import { trendingRouter } from "./routers/trending";
 import { notificationsRouter } from "./routers/notifications";
 
 export const router = {
   planets: planetsRouter,
-  tweets: tweetsRouter,
+  posts: postsRouter,
   likes: likesRouter,
-  retweets: retweetsRouter,
+  reposts: repostsRouter,
   follows: followsRouter,
   trending: trendingRouter,
   notifications: notificationsRouter,
-}
+};

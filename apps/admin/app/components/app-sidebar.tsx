@@ -1,7 +1,6 @@
 "use client";
 
 import { Home, User, Bell, Hash, Settings, LogOut } from "lucide-react";
-import { useState, useEffect } from "react";
 import {
   Sidebar,
   SidebarContent,
@@ -50,40 +49,15 @@ const items = [
 
 export function AppSidebar() {
   const { session, signOut } = useAuth();
-  const [unreadCount, setUnreadCount] = useState(0);
 
-  useEffect(() => {
-    if (session) {
-      loadUnreadCount();
-      // Poll for new notifications every 30 seconds
-      const interval = setInterval(loadUnreadCount, 30000);
-      return () => clearInterval(interval);
-    }
-  }, [session]);
-
-  const loadUnreadCount = async () => {
-    try {
-      const response = await fetch("/api/rpc/notifications.unreadCount", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setUnreadCount(data.count);
-      }
-    } catch (error) {
-      console.error("Failed to load unread count:", error);
-    }
-  };
+  // Fake unread count for demonstration
+  const unreadCount = 3;
 
   return (
     <Sidebar>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Twitter Clone</SidebarGroupLabel>
+          <SidebarGroupLabel>Social Feed</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {items.map((item) => (

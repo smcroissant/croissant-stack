@@ -34,7 +34,7 @@ export function AuthRequiredDialog({
         <DialogHeader>
           <DialogTitle>Sign in required</DialogTitle>
           <DialogDescription>
-            You need to be signed in to post tweets, like, retweet, or interact
+            You need to be signed in to create posts, like, repost, or interact
             with content.
           </DialogDescription>
         </DialogHeader>

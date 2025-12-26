@@ -4,6 +4,7 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "@repo/ui/componen
 import "@repo/ui/globals.css";
 import { AppSidebar } from "./components/app-sidebar";
 import { AuthProvider } from "./providers/auth-provider";
+import { QueryProvider } from "./providers/query-provider";
 import { ThemeProvider } from "./components/theme-provider";
 
 const geistSans = Geist({
@@ -17,8 +18,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Twitter Clone",
-  description: "A Twitter-like social media app",
+  title: "Social Feed",
+  description: "A social media application",
 };
 
 export default function RootLayout({
@@ -37,17 +38,19 @@ export default function RootLayout({
             enableSystem
             disableTransitionOnChange
           >
-          <AuthProvider>
-            <SidebarProvider>
-              <AppSidebar />
-              <SidebarInset>
-                <main>
-                  <SidebarTrigger />
-                  {children}
-                </main>
-              </SidebarInset>
-            </SidebarProvider>
-          </AuthProvider>
+          <QueryProvider>
+            <AuthProvider>
+              <SidebarProvider>
+                <AppSidebar />
+                <SidebarInset>
+                  <main>
+                    <SidebarTrigger />
+                    {children}
+                  </main>
+                </SidebarInset>
+              </SidebarProvider>
+            </AuthProvider>
+          </QueryProvider>
         </ThemeProvider>
       </body>
     </html>

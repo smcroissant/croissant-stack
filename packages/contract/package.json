@@ -15,6 +15,6 @@
     "@types/node": "^22.15.3"
   },
   "dependencies": {
-    "@orpc/contract": "^1.12.3"
+    "@orpc/contract": "^1.13.1"
   }
 }
