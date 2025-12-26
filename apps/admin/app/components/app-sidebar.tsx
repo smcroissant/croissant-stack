@@ -1,5 +1,6 @@
-import { Calendar, Home, Inbox, Search, Settings } from "lucide-react"
+"use client";
 
+import { Home, User, Bell, Hash, Settings, LogOut } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -9,43 +10,50 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-} from "@repo/ui/components/sidebar"
+  SidebarFooter,
+} from "@repo/ui/components/sidebar";
+import { useAuth } from "../providers/auth-provider";
+import { Avatar } from "@repo/ui/components/avatar";
+import { Separator } from "@repo/ui/components/separator";
+import { ModeToggle } from "./mode-toggle";
 
 // Menu items.
 const items = [
   {
     title: "Home",
-    url: "#",
+    url: "/feed",
     icon: Home,
   },
   {
-    title: "Inbox",
-    url: "#",
-    icon: Inbox,
+    title: "Explore",
+    url: "/explore",
+    icon: Hash,
   },
   {
-    title: "Calendar",
-    url: "#",
-    icon: Calendar,
+    title: "Notifications",
+    url: "/notifications",
+    icon: Bell,
   },
   {
-    title: "Search",
-    url: "#",
-    icon: Search,
+    title: "Profile",
+    url: "/profile/me",
+    icon: User,
   },
   {
     title: "Settings",
-    url: "#",
+    url: "/settings",
     icon: Settings,
   },
-]
+];
 
 export function AppSidebar() {
+  const { session, signOut } = useAuth();
+
   return (
     <Sidebar>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Application</SidebarGroupLabel>
+          <SidebarGroupLabel>Twitter Clone</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {items.map((item) => (
@@ -62,6 +70,51 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+
+      <SidebarFooter>
+        <Separator className="mb-2" />
+        <div className="flex items-center justify-between px-2 py-2">
+          <span className="text-sm font-medium">Theme</span>
+          <ModeToggle />
+        </div>
+        <Separator className="my-2" />
+        {session ? (
+          <>
+            <div className="flex items-center gap-3 px-2 py-2">
+              <Avatar className="w-10 h-10">
+                <div className="w-full h-full bg-primary/10 flex items-center justify-center text-sm font-medium">
+                  {session.user.name?.[0]?.toUpperCase() || "?"}
+                </div>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{session.user.name}</p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {session.user.email}
+                </p>
+              </div>
+            </div>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton onClick={signOut} className="text-destructive">
+                  <LogOut />
+                  <span>Log out</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </>
+        ) : (
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild>
+                <a href="/login" className="font-medium">
+                  <User />
+                  <span>Sign in</span>
+                </a>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        )}
+      </SidebarFooter>
     </Sidebar>
-  )
+  );
 }
