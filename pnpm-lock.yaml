@@ -14,6 +14,9 @@ importers:
       '@orpc/server':
         specifier: ^1.12.3
         version: 1.12.3(ws@8.18.3)
+      '@orpc/tanstack-query':
+        specifier: ^1.13.1
+        version: 1.13.1(@orpc/client@1.12.3)(@tanstack/query-core@5.90.12)
       better-auth:
         specifier: ^1.4.6
         version: 1.4.6(next@16.0.10(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.2(react@19.2.2))(react@19.2.2))(react-dom@19.2.2(react@19.2.2))(react@19.2.2)
@@ -1957,6 +1960,14 @@ packages:
       '@opentelemetry/api':
         optional: true
 
+  '@orpc/shared@1.13.1':
+    resolution: {integrity: sha512-PJY1l9QxxXpojea/c1BgmP2owby19ZTi/l35O7N2GIAXmvQPSvDp/BBAZr4NS0NmRPDj7LQewXMEJc3hFSysEw==}
+    peerDependencies:
+      '@opentelemetry/api': '>=1.9.0'
+    peerDependenciesMeta:
+      '@opentelemetry/api':
+        optional: true
+
   '@orpc/standard-server-aws-lambda@1.12.3':
     resolution: {integrity: sha512-kh8HnwryMIWJJ4601kMJ4dlTBOnqLL7+Xk7zz0XSX24geHgutMb1cRMz4UcHg2ttoLTFWjCCJv7Xc6+AOMWONg==}
 
@@ -1979,6 +1990,12 @@ packages:
 
   '@orpc/standard-server@1.12.3':
     resolution: {integrity: sha512-m69mZ0D3u/zCKW0RXWYlPOW+0xqMA8mfHjpdP+B2SwLM2MUPr3P0R0J/RjAyffbja3Dj5QPKpL0xkIyDxELodA==}
+
+  '@orpc/tanstack-query@1.13.1':
+    resolution: {integrity: sha512-Bo4sCMYGqE7pfbsev+8ARZ+Tp7uUniF0yaAI5CkOJdjCPGeQ4fsUQ7LZNc6jWB+//PpycivcfUmknQDoor1MfA==}
+    peerDependencies:
+      '@orpc/client': 1.13.1
+      '@tanstack/query-core': '>=5.80.2'
 
   '@radix-ui/number@1.1.1':
     resolution: {integrity: sha512-MkKCwxlXTgz6CFoJx3pCwn07GKp36+aZyu/u2Ln2VrA5DcdyCZkASEDBTd8x5whTQQL5CiYf4prXKLcgQdv29g==}
@@ -2847,6 +2864,9 @@ packages:
 
   '@tailwindcss/postcss@4.1.18':
     resolution: {integrity: sha512-Ce0GFnzAOuPyfV5SxjXGn0CubwGcuDB0zcdaPuCSzAa/2vII24JTkH+I6jcbXLb1ctjZMZZI6OjDaLPJQL1S0g==}
+
+  '@tanstack/query-core@5.90.12':
+    resolution: {integrity: sha512-T1/8t5DhV/SisWjDnaiU2drl6ySvsHj1bHBCWNXd+/T+Hh1cf6JodyEYMd5sgwm+b/mETT4EV3H+zCVczCU5hg==}
 
   '@tybys/wasm-util@0.10.1':
     resolution: {integrity: sha512-9tTaPJLSiejZKx+Bmog4uSubteqTvFrVrURwkmHixBo0G4seD0zUxp98E1DzUBJxLQ3NPwXrGKDiVjwx/DpPsg==}
@@ -8103,6 +8123,11 @@ snapshots:
       radash: 12.1.1
       type-fest: 5.3.1
 
+  '@orpc/shared@1.13.1':
+    dependencies:
+      radash: 12.1.1
+      type-fest: 5.3.1
+
   '@orpc/standard-server-aws-lambda@1.12.3':
     dependencies:
       '@orpc/shared': 1.12.3
@@ -8145,6 +8170,14 @@ snapshots:
   '@orpc/standard-server@1.12.3':
     dependencies:
       '@orpc/shared': 1.12.3
+    transitivePeerDependencies:
+      - '@opentelemetry/api'
+
+  '@orpc/tanstack-query@1.13.1(@orpc/client@1.12.3)(@tanstack/query-core@5.90.12)':
+    dependencies:
+      '@orpc/client': 1.12.3
+      '@orpc/shared': 1.13.1
+      '@tanstack/query-core': 5.90.12
     transitivePeerDependencies:
       - '@opentelemetry/api'
 
@@ -9219,6 +9252,8 @@ snapshots:
       '@tailwindcss/oxide': 4.1.18
       postcss: 8.5.6
       tailwindcss: 4.1.18
+
+  '@tanstack/query-core@5.90.12': {}
 
   '@tybys/wasm-util@0.10.1':
     dependencies:

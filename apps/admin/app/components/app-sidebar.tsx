@@ -1,6 +1,7 @@
 "use client";
 
 import { Home, User, Bell, Hash, Settings, LogOut } from "lucide-react";
+import { useState, useEffect } from "react";
 import {
   Sidebar,
   SidebarContent,
@@ -33,6 +34,7 @@ const items = [
     title: "Notifications",
     url: "/notifications",
     icon: Bell,
+    badge: true, // Show badge for notifications
   },
   {
     title: "Profile",
@@ -48,6 +50,34 @@ const items = [
 
 export function AppSidebar() {
   const { session, signOut } = useAuth();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (session) {
+      loadUnreadCount();
+      // Poll for new notifications every 30 seconds
+      const interval = setInterval(loadUnreadCount, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [session]);
+
+  const loadUnreadCount = async () => {
+    try {
+      const response = await fetch("/api/rpc/notifications.unreadCount", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setUnreadCount(data.count);
+      }
+    } catch (error) {
+      console.error("Failed to load unread count:", error);
+    }
+  };
 
   return (
     <Sidebar>
@@ -59,9 +89,14 @@ export function AppSidebar() {
               {items.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
-                    <a href={item.url}>
+                    <a href={item.url} className="relative">
                       <item.icon />
                       <span>{item.title}</span>
+                      {item.badge && unreadCount > 0 && (
+                        <span className="absolute right-2 bg-primary text-primary-foreground text-xs px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
+                          {unreadCount > 99 ? "99+" : unreadCount}
+                        </span>
+                      )}
                     </a>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

@@ -1,7 +1,7 @@
 import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 import { db } from "@repo/db";
-import { follows } from "@repo/db/schema";
+import { follows, notifications } from "@repo/db/schema";
 import { user } from "@repo/db/auth-schema";
 import { eq, and, sql } from "drizzle-orm";
 import { authorized, base } from "../middleware/auth";
@@ -33,24 +33,47 @@ export const toggleFollow = authorized
       .limit(1);
 
     if (existingFollow.length > 0) {
-      // Unfollow
-      await db
-        .delete(follows)
-        .where(
-          and(
-            eq(follows.followerId, currentUserId),
-            eq(follows.followingId, targetUserId)
-          )
-        );
+      // Unfollow - remove notification
+      await Promise.all([
+        db
+          .delete(follows)
+          .where(
+            and(
+              eq(follows.followerId, currentUserId),
+              eq(follows.followingId, targetUserId)
+            )
+          ),
+        db
+          .delete(notifications)
+          .where(
+            and(
+              eq(notifications.actorId, currentUserId),
+              eq(notifications.userId, targetUserId),
+              eq(notifications.type, "follow")
+            )
+          ),
+      ]);
       return { following: false };
     } else {
-      // Follow
+      // Follow - create notification
       const id = crypto.randomUUID();
       await db.insert(follows).values({
         id,
         followerId: currentUserId,
         followingId: targetUserId,
       });
+
+      // Create notification
+      const notificationId = crypto.randomUUID();
+      await db.insert(notifications).values({
+        id: notificationId,
+        userId: targetUserId,
+        type: "follow",
+        actorId: currentUserId,
+        tweetId: null,
+        isRead: false,
+      });
+
       return { following: true };
     }
   });

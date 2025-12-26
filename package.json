@@ -27,6 +27,7 @@
   "dependencies": {
     "@orpc/client": "^1.12.3",
     "@orpc/server": "^1.12.3",
+    "@orpc/tanstack-query": "^1.13.1",
     "better-auth": "^1.4.6",
     "dotenv": "^17.2.3",
     "drizzle-orm": "^0.45.1",

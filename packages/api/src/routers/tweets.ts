@@ -1,7 +1,7 @@
 import { os, ORPCError } from "@orpc/server";
 import { z } from "zod";
 import { db } from "@repo/db";
-import { tweets, likes, retweets, follows } from "@repo/db/schema";
+import { tweets, likes, retweets, follows, notifications } from "@repo/db/schema";
 import { user } from "@repo/db/auth-schema";
 import { eq, and, desc, inArray, sql, isNull } from "drizzle-orm";
 import { authorized, base } from "../middleware/auth";
@@ -348,6 +348,27 @@ export const createTweet = authorized
         parentTweetId: parentTweetId || null,
       })
       .returning();
+
+    // Create notification for reply
+    if (parentTweetId) {
+      const [parentTweet] = await db
+        .select({ authorId: tweets.authorId })
+        .from(tweets)
+        .where(eq(tweets.id, parentTweetId))
+        .limit(1);
+
+      if (parentTweet && parentTweet.authorId !== userId) {
+        const notificationId = crypto.randomUUID();
+        await db.insert(notifications).values({
+          id: notificationId,
+          userId: parentTweet.authorId,
+          type: "reply",
+          actorId: userId,
+          tweetId: id,
+          isRead: false,
+        });
+      }
+    }
 
     return newTweet;
   });
