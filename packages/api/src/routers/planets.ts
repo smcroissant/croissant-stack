@@ -1,4 +1,3 @@
-import type { IncomingHttpHeaders } from 'node:http'
 import { ORPCError, os } from '@orpc/server'
 import * as z from 'zod'
 import { authorized } from '../middleware/auth'
@@ -18,15 +17,9 @@ const FindPlanetSchema = z.object({
 })
 
 export const listPlanet = os
-  .input(
-    z.object({
-      limit: z.number().int().min(1).max(100).optional(),
-      cursor: z.number().int().min(0).default(0),
-    }),
-  )
-  .handler(async ({ input }) => {
-    // your list code here
-    return [{ id: 1, name: 'name' }]
+  .handler(async () => {
+    const allPlanets = await db.select().from(planets)
+    return allPlanets
   })
 
 export const findPlanet = os

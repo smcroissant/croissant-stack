@@ -1,93 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { PostCard } from "../components/post-card";
 import { ComposePost } from "../components/compose-post";
 import { AuthRequiredDialog } from "../components/auth-required-dialog";
 import { Button } from "@repo/ui/components/button";
-import { Feather } from "lucide-react";
+import { Skeleton } from "@repo/ui/components/skeleton";
+import { Feather, Loader2, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../providers/auth-provider";
-
-interface Post {
-  id: string;
-  content: string;
-  authorId: string;
-  authorName: string;
-  authorEmail: string;
-  parentPostId: string | null;
-  createdAt: Date;
-  likesCount: number;
-  repostsCount: number;
-  repliesCount: number;
-  isLiked: boolean;
-  isReposted: boolean;
-}
-
-// Fake posts data
-const FAKE_POSTS: Post[] = [
-  {
-    id: "post-1",
-    content: "Just shipped a new feature! Really excited about this one.",
-    authorId: "user-1",
-    authorName: "John Doe",
-    authorEmail: "john@example.com",
-    parentPostId: null,
-    createdAt: new Date(Date.now() - 1000 * 60 * 10), // 10 minutes ago
-    likesCount: 5,
-    repostsCount: 2,
-    repliesCount: 1,
-    isLiked: false,
-    isReposted: false,
-  },
-  {
-    id: "post-2",
-    content: "Working on something exciting today! Can't wait to share more details soon.",
-    authorId: "user-2",
-    authorName: "Jane Smith",
-    authorEmail: "jane@example.com",
-    parentPostId: null,
-    createdAt: new Date(Date.now() - 1000 * 60 * 30), // 30 minutes ago
-    likesCount: 12,
-    repostsCount: 3,
-    repliesCount: 4,
-    isLiked: true,
-    isReposted: false,
-  },
-  {
-    id: "post-3",
-    content: "Great article about TypeScript best practices! Learned a lot from this.",
-    authorId: "user-3",
-    authorName: "Bob Johnson",
-    authorEmail: "bob@example.com",
-    parentPostId: null,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60), // 1 hour ago
-    likesCount: 8,
-    repostsCount: 5,
-    repliesCount: 2,
-    isLiked: false,
-    isReposted: true,
-  },
-  {
-    id: "post-4",
-    content: "The weather today is amazing! Perfect day for a walk in the park.",
-    authorId: "user-4",
-    authorName: "Alice Williams",
-    authorEmail: "alice@example.com",
-    parentPostId: null,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 hours ago
-    likesCount: 3,
-    repostsCount: 0,
-    repliesCount: 1,
-    isLiked: false,
-    isReposted: false,
-  },
-];
+import { useFeed, useCreatePost, useLikePost, useRepostPost } from "../hooks/use-feed";
 
 export default function FeedPage() {
   const router = useRouter();
   const { session } = useAuth();
-  const [posts, setPosts] = useState<Post[]>(FAKE_POSTS);
   const [isComposeOpen, setIsComposeOpen] = useState(false);
   const [showAuthRequired, setShowAuthRequired] = useState(false);
   const [replyToPost, setReplyToPost] = useState<{
@@ -95,60 +21,63 @@ export default function FeedPage() {
     content: string;
   } | null>(null);
 
+  // Fetch feed using custom hook
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useFeed();
+
+  // Mutations
+  const createPostMutation = useCreatePost();
+  const likePostMutation = useLikePost();
+  const repostPostMutation = useRepostPost();
+
+  // Flatten pages into a single array of posts
+  const posts = useMemo(() => {
+    if (!data?.pages) return [];
+    return data.pages.flatMap((page) => page.posts);
+  }, [data]);
+
   const handleComposePost = async (
     content: string,
     parentPostId?: string
   ) => {
-    // Simulate creating a post
-    const newPost: Post = {
-      id: `post-${Date.now()}`,
-      content,
-      authorId: session?.user.id || "current-user",
-      authorName: session?.user.name || "Current User",
-      authorEmail: session?.user.email || "user@example.com",
-      parentPostId: parentPostId || null,
-      createdAt: new Date(),
-      likesCount: 0,
-      repostsCount: 0,
-      repliesCount: 0,
-      isLiked: false,
-      isReposted: false,
-    };
+    if (!session) {
+      setShowAuthRequired(true);
+      return;
+    }
 
-    setPosts([newPost, ...posts]);
-    setReplyToPost(null);
+    createPostMutation.mutate(
+      { content, parentPostId },
+      {
+        onSuccess: () => {
+          setIsComposeOpen(false);
+          setReplyToPost(null);
+        },
+      }
+    );
   };
 
   const handleLike = async (postId: string) => {
-    setPosts((prev) =>
-      prev.map((post) =>
-        post.id === postId
-          ? {
-              ...post,
-              isLiked: !post.isLiked,
-              likesCount: post.isLiked
-                ? post.likesCount - 1
-                : post.likesCount + 1,
-            }
-          : post
-      )
-    );
+    if (!session) {
+      setShowAuthRequired(true);
+      return;
+    }
+    likePostMutation.mutate(postId);
   };
 
   const handleRepost = async (postId: string) => {
-    setPosts((prev) =>
-      prev.map((post) =>
-        post.id === postId
-          ? {
-              ...post,
-              isReposted: !post.isReposted,
-              repostsCount: post.isReposted
-                ? post.repostsCount - 1
-                : post.repostsCount + 1,
-            }
-          : post
-      )
-    );
+    if (!session) {
+      setShowAuthRequired(true);
+      return;
+    }
+    repostPostMutation.mutate(postId);
   };
 
   const handleReply = (postId: string) => {
@@ -163,7 +92,7 @@ export default function FeedPage() {
     }
   };
 
-  const handlePostClick = () => {
+  const handleComposeClick = () => {
     if (!session) {
       setShowAuthRequired(true);
       return;
@@ -172,41 +101,153 @@ export default function FeedPage() {
     setIsComposeOpen(true);
   };
 
+  const handlePostClick = (postId: string) => {
+    router.push(`/feed/${postId}`);
+  };
+
   const handleAuthorClick = (authorId: string) => {
     router.push(`/profile/${authorId}`);
   };
+
+  // Not logged in state
+  if (!session) {
+    return (
+      <div className="max-w-2xl mx-auto">
+        <div className="sticky top-0 bg-background/80 backdrop-blur-sm z-10 border-b">
+          <div className="flex items-center justify-between p-4">
+            <h1 className="text-xl font-bold">Home</h1>
+          </div>
+        </div>
+        <div className="flex flex-col items-center justify-center p-12 text-center">
+          <div className="p-6 bg-gradient-to-br from-blue-500/10 to-purple-500/10 rounded-full mb-6">
+            <Feather className="w-12 h-12 text-blue-500" />
+          </div>
+          <p className="text-xl font-medium mb-2">Welcome to your Feed</p>
+          <p className="text-muted-foreground mb-6 max-w-md">
+            Sign in to see posts from people you follow and share your thoughts with the world.
+          </p>
+          <Button onClick={() => router.push("/login")} className="gap-2">
+            Sign In
+          </Button>
+        </div>
+        <AuthRequiredDialog
+          open={showAuthRequired}
+          onOpenChange={setShowAuthRequired}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-2xl mx-auto">
       <div className="sticky top-0 bg-background/80 backdrop-blur-sm z-10 border-b">
         <div className="flex items-center justify-between p-4">
           <h1 className="text-xl font-bold">Home</h1>
-          <Button size="sm" className="gap-2" onClick={handlePostClick}>
+          <Button size="sm" className="gap-2" onClick={handleComposeClick}>
             <Feather className="w-4 h-4" />
             Post
           </Button>
         </div>
       </div>
 
-      {posts.length === 0 ? (
+      {/* Loading State */}
+      {isLoading ? (
+        <div className="divide-y">
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="p-4 space-y-3">
+              <div className="flex items-center gap-3">
+                <Skeleton className="h-10 w-10 rounded-full" />
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-3 w-24" />
+                </div>
+              </div>
+              <Skeleton className="h-16 w-full" />
+              <div className="flex gap-4">
+                <Skeleton className="h-8 w-16" />
+                <Skeleton className="h-8 w-16" />
+                <Skeleton className="h-8 w-16" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : isError ? (
         <div className="flex flex-col items-center justify-center p-12 text-center">
+          <div className="p-4 bg-red-100 dark:bg-red-900/20 rounded-full mb-4">
+            <Feather className="w-8 h-8 text-red-500" />
+          </div>
+          <p className="text-lg font-medium mb-2">Failed to load feed</p>
           <p className="text-muted-foreground mb-4">
-            Your feed is empty. Follow some users to see their posts here.
+            {error?.message || "An unexpected error occurred"}
           </p>
-          <Button onClick={handlePostClick}>Create your first post</Button>
+          <Button variant="outline" onClick={() => refetch()} className="gap-2">
+            <RefreshCw className="w-4 h-4" />
+            Try Again
+          </Button>
+        </div>
+      ) : posts.length === 0 ? (
+        <div className="flex flex-col items-center justify-center p-12 text-center">
+          <div className="p-6 bg-gradient-to-br from-blue-500/10 to-purple-500/10 rounded-full mb-6">
+            <Feather className="w-12 h-12 text-blue-500" />
+          </div>
+          <p className="text-xl font-medium mb-2">Your feed is empty</p>
+          <p className="text-muted-foreground mb-6 max-w-md">
+            Follow some users to see their posts here, or create your first post to get started.
+          </p>
+          <Button onClick={handleComposeClick} className="gap-2">
+            <Feather className="w-4 h-4" />
+            Create your first post
+          </Button>
         </div>
       ) : (
         <div>
           {posts.map((post) => (
             <PostCard
               key={post.id}
-              post={post}
+              post={{
+                id: post.id,
+                content: post.content,
+                authorId: post.authorId,
+                authorName: post.authorName || "Unknown",
+                authorEmail: post.authorEmail,
+                parentPostId: post.parentPostId,
+                createdAt: new Date(post.createdAt),
+                likesCount: post.likesCount,
+                repostsCount: post.repostsCount,
+                repliesCount: post.repliesCount,
+                isLiked: post.isLiked,
+                isReposted: post.isReposted,
+                replyToAuthorName: post.replyToAuthorName,
+                replyToAuthorEmail: post.replyToAuthorEmail,
+              }}
               onLike={handleLike}
               onRepost={handleRepost}
               onReply={handleReply}
               onAuthorClick={handleAuthorClick}
+              onPostClick={handlePostClick}
             />
           ))}
+
+          {/* Load More Button */}
+          {hasNextPage && (
+            <div className="p-4 text-center">
+              <Button
+                variant="outline"
+                onClick={() => fetchNextPage()}
+                disabled={isFetchingNextPage}
+                className="gap-2"
+              >
+                {isFetchingNextPage ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  "Load more"
+                )}
+              </Button>
+            </div>
+          )}
         </div>
       )}
 

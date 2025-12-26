@@ -195,6 +195,7 @@ export const schema = {
   sessionRelations,
   accountRelations,
   userRelations,
+  planets,
   posts,
   postsRelations,
   likes,

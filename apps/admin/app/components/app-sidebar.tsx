@@ -1,6 +1,6 @@
 "use client";
 
-import { Home, User, Bell, Hash, Settings, LogOut } from "lucide-react";
+import { Home, User, Bell, Hash, Settings, LogOut, Globe } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,

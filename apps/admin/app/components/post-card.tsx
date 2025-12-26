@@ -3,7 +3,7 @@
 import { Card } from "@repo/ui/components/card";
 import { Button } from "@repo/ui/components/button";
 import { Avatar } from "@repo/ui/components/avatar";
-import { MessageCircle, Repeat2, Heart, Share } from "lucide-react";
+import { MessageCircle, Repeat2, Heart, Share, CornerDownRight } from "lucide-react";
 import { useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 
@@ -21,11 +21,14 @@ interface PostCardProps {
     repliesCount: number;
     isLiked: boolean;
     isReposted: boolean;
+    replyToAuthorName?: string | null;
+    replyToAuthorEmail?: string | null;
   };
   onLike?: (postId: string) => Promise<void>;
   onRepost?: (postId: string) => Promise<void>;
   onReply?: (postId: string) => void;
   onAuthorClick?: (authorId: string) => void;
+  onPostClick?: (postId: string) => void;
 }
 
 export function PostCard({
@@ -34,6 +37,7 @@ export function PostCard({
   onRepost,
   onReply,
   onAuthorClick,
+  onPostClick,
 }: PostCardProps) {
   const [isLiked, setIsLiked] = useState(post.isLiked);
   const [isReposted, setIsReposted] = useState(post.isReposted);
@@ -82,8 +86,22 @@ export function PostCard({
     }
   };
 
+  const handlePostClick = (e: React.MouseEvent) => {
+    // Don't trigger if clicking on buttons or links
+    const target = e.target as HTMLElement;
+    if (target.closest('button') || target.closest('a')) {
+      return;
+    }
+    if (onPostClick) {
+      onPostClick(post.id);
+    }
+  };
+
   return (
-    <Card className="p-4 hover:bg-accent/5 transition-colors border-b border-x-0 border-t-0 rounded-none">
+    <Card 
+      className="p-4 hover:bg-accent/5 transition-colors border-b border-x-0 border-t-0 rounded-none cursor-pointer"
+      onClick={handlePostClick}
+    >
       <div className="flex gap-3">
         <Avatar
           className="w-10 h-10 cursor-pointer"
@@ -95,6 +113,17 @@ export function PostCard({
         </Avatar>
 
         <div className="flex-1 min-w-0">
+          {/* Reply indicator */}
+          {post.parentPostId && post.replyToAuthorEmail && (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+              <CornerDownRight className="w-3 h-3" />
+              <span>Replying to</span>
+              <span className="text-primary hover:underline cursor-pointer">
+                @{post.replyToAuthorEmail.split("@")[0]}
+              </span>
+            </div>
+          )}
+
           <div className="flex items-center gap-2 mb-1">
             <button
               onClick={handleAuthorClick}
