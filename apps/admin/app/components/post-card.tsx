@@ -3,7 +3,7 @@
 import { Card } from "@repo/ui/components/card";
 import { Button } from "@repo/ui/components/button";
 import { Avatar } from "@repo/ui/components/avatar";
-import { MessageCircle, Repeat2, Heart, Share, CornerDownRight } from "lucide-react";
+import { MessageCircle, Repeat2, Heart, Share, CornerDownRight, Lock } from "lucide-react";
 import { useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 
@@ -14,6 +14,7 @@ interface PostCardProps {
     authorId: string;
     authorName: string;
     authorEmail: string;
+    authorIsPrivate?: boolean;
     parentPostId: string | null;
     createdAt: Date;
     likesCount: number;
@@ -23,12 +24,17 @@ interface PostCardProps {
     isReposted: boolean;
     replyToAuthorName?: string | null;
     replyToAuthorEmail?: string | null;
+    // Repost info - when this post appears in feed because someone reposted it
+    repostedByUserId?: string | null;
+    repostedByUserName?: string | null;
+    repostedByUserEmail?: string | null;
   };
   onLike?: (postId: string) => Promise<void>;
   onRepost?: (postId: string) => Promise<void>;
   onReply?: (postId: string) => void;
   onAuthorClick?: (authorId: string) => void;
   onPostClick?: (postId: string) => void;
+  onRepostedByClick?: (userId: string) => void;
 }
 
 export function PostCard({
@@ -38,6 +44,7 @@ export function PostCard({
   onReply,
   onAuthorClick,
   onPostClick,
+  onRepostedByClick,
 }: PostCardProps) {
   const [isLiked, setIsLiked] = useState(post.isLiked);
   const [isReposted, setIsReposted] = useState(post.isReposted);
@@ -97,11 +104,31 @@ export function PostCard({
     }
   };
 
+  const handleRepostedByClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onRepostedByClick && post.repostedByUserId) {
+      onRepostedByClick(post.repostedByUserId);
+    }
+  };
+
   return (
     <Card 
       className="p-4 hover:bg-accent/5 transition-colors border-b border-x-0 border-t-0 rounded-none cursor-pointer"
       onClick={handlePostClick}
     >
+      {/* Repost indicator */}
+      {post.repostedByUserId && post.repostedByUserEmail && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2 ml-12">
+          <Repeat2 className="w-3 h-3" />
+          <button
+            onClick={handleRepostedByClick}
+            className="hover:underline"
+          >
+            {post.repostedByUserName || post.repostedByUserEmail.split("@")[0]} reposted
+          </button>
+        </div>
+      )}
+
       <div className="flex gap-3">
         <Avatar
           className="w-10 h-10 cursor-pointer"
@@ -127,9 +154,12 @@ export function PostCard({
           <div className="flex items-center gap-2 mb-1">
             <button
               onClick={handleAuthorClick}
-              className="font-semibold hover:underline text-sm"
+              className="font-semibold hover:underline text-sm flex items-center gap-1"
             >
               {post.authorName || "Unknown"}
+              {post.authorIsPrivate && (
+                <Lock className="w-3 h-3 text-muted-foreground" />
+              )}
             </button>
             <span className="text-muted-foreground text-sm">
               @{post.authorEmail?.split("@")[0] || "unknown"}

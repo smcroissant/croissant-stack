@@ -176,7 +176,7 @@ export function FeedPosts({ isAuthenticated }: FeedPostsProps) {
         <div>
           {posts.map((post) => (
             <PostCard
-              key={post.id}
+              key={post.repostedByUserId ? `${post.id}-repost-${post.repostedByUserId}` : post.id}
               post={{
                 id: post.id,
                 content: post.content,
@@ -192,12 +192,16 @@ export function FeedPosts({ isAuthenticated }: FeedPostsProps) {
                 isReposted: post.isReposted,
                 replyToAuthorName: post.replyToAuthorName,
                 replyToAuthorEmail: post.replyToAuthorEmail,
+                repostedByUserId: post.repostedByUserId,
+                repostedByUserName: post.repostedByUserName,
+                repostedByUserEmail: post.repostedByUserEmail,
               }}
               onLike={handleLike}
               onRepost={handleRepost}
               onReply={handleReply}
               onAuthorClick={handleAuthorClick}
               onPostClick={handlePostClick}
+              onRepostedByClick={handleAuthorClick}
             />
           ))}
 

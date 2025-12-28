@@ -3,7 +3,7 @@
 import { Card } from "@repo/ui/components/card";
 import { Button } from "@repo/ui/components/button";
 import { Avatar } from "@repo/ui/components/avatar";
-import { MessageCircle, Repeat2, Heart, Share, CornerDownRight } from "lucide-react";
+import { MessageCircle, Repeat2, Heart, Share, CornerDownRight, Lock } from "lucide-react";
 import { useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { useRouter } from "next/navigation";
@@ -15,6 +15,7 @@ export interface NestedReply {
   authorId: string;
   authorName: string | null;
   authorEmail: string;
+  authorIsPrivate?: boolean;
   parentPostId: string | null;
   createdAt: Date;
   likesCount: number;
@@ -139,9 +140,12 @@ function ReplyItem({
               <div className="flex items-center gap-1.5 flex-wrap">
                 <button
                   onClick={handleAuthorClick}
-                  className={`font-semibold hover:underline ${textSize}`}
+                  className={`font-semibold hover:underline ${textSize} flex items-center gap-1`}
                 >
                   {reply.authorName || "Unknown"}
+                  {reply.authorIsPrivate && (
+                    <Lock className="w-3 h-3 text-muted-foreground" />
+                  )}
                 </button>
                 <span className={`text-muted-foreground ${textSize}`}>
                   @{reply.authorEmail?.split("@")[0] || "unknown"}

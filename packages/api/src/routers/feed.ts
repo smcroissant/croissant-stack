@@ -57,7 +57,7 @@ const PaginationSchema = z.object({
   cursor: z.string().optional(), // cursor is the createdAt timestamp
 })
 
-// Get feed - posts from users the current user follows
+// Get feed - posts from users the current user follows + reposts by followed users
 export const getFeed = authorized
   .input(PaginationSchema)
   .handler(async ({ input, context }) => {
@@ -79,9 +79,12 @@ export const getFeed = authorized
       return { posts: [], nextCursor: undefined }
     }
 
-    // Build the query for posts
-    // Note: getFeed already correctly handles privacy since it only fetches from followed users + self
-    let postsQuery = db
+    // We need to fetch both direct posts and reposts, then merge them
+    // For pagination, we fetch extra and merge/sort by feed timestamp
+    const cursorDate = cursor ? new Date(cursor) : null
+
+    // 1. Get direct posts from followed users + self
+    const directPostsQuery = db
       .select({
         id: posts.id,
         content: posts.content,
@@ -92,26 +95,117 @@ export const getFeed = authorized
         authorEmail: user.email,
         authorImage: user.image,
         authorIsPrivate: user.isPrivate,
+        // No repost info for direct posts
+        repostedByUserId: sql<string | null>`NULL`,
+        repostedByUserName: sql<string | null>`NULL`,
+        repostedByUserEmail: sql<string | null>`NULL`,
+        repostedAt: sql<Date | null>`NULL`,
+        feedTimestamp: posts.createdAt,
       })
       .from(posts)
       .innerJoin(user, eq(posts.authorId, user.id))
       .where(
-        cursor
+        cursorDate
           ? and(
               inArray(posts.authorId, authorIds),
-              sql`${posts.createdAt} < ${new Date(cursor)}`
+              sql`${posts.createdAt} < ${cursorDate}`
             )
           : inArray(posts.authorId, authorIds)
       )
       .orderBy(desc(posts.createdAt))
       .limit(limit + 1)
 
-    const feedPosts = await postsQuery
+    // 2. Get reposts by followed users (not including user's own reposts as those are redundant)
+    // We want to see posts that people we follow have reposted
+    const repostedPostsQuery = db
+      .select({
+        id: posts.id,
+        content: posts.content,
+        authorId: posts.authorId,
+        parentPostId: posts.parentPostId,
+        createdAt: posts.createdAt,
+        authorName: user.name,
+        authorEmail: user.email,
+        authorImage: user.image,
+        authorIsPrivate: user.isPrivate,
+        // Repost info
+        repostedByUserId: reposts.userId,
+        repostedByUserName: sql<string | null>`repost_user.name`,
+        repostedByUserEmail: sql<string | null>`repost_user.email`,
+        repostedAt: reposts.createdAt,
+        feedTimestamp: reposts.createdAt,
+      })
+      .from(reposts)
+      .innerJoin(posts, eq(reposts.postId, posts.id))
+      .innerJoin(user, eq(posts.authorId, user.id))
+      .innerJoin(
+        sql`"user" as repost_user`,
+        sql`repost_user.id = ${reposts.userId}`
+      )
+      .where(
+        cursorDate
+          ? and(
+              inArray(reposts.userId, followingIds),
+              sql`${reposts.createdAt} < ${cursorDate}`
+            )
+          : inArray(reposts.userId, followingIds)
+      )
+      .orderBy(desc(reposts.createdAt))
+      .limit(limit + 1)
+
+    // Execute both queries in parallel
+    const [directPosts, repostedPosts] = await Promise.all([
+      directPostsQuery,
+      repostedPostsQuery,
+    ])
+
+    // Combine and sort by feedTimestamp (descending)
+    type FeedItem = typeof directPosts[number]
+    const combinedFeed: FeedItem[] = [...directPosts, ...repostedPosts]
+    
+    // Sort by feedTimestamp descending
+    combinedFeed.sort((a, b) => {
+      const timeA = new Date(a.feedTimestamp).getTime()
+      const timeB = new Date(b.feedTimestamp).getTime()
+      return timeB - timeA
+    })
+
+    // Deduplicate: if a post appears both as direct and reposted, prefer direct post
+    // Also handle the case where the same post is reposted by multiple followed users
+    const seenPostIds = new Set<string>()
+    const seenRepostKeys = new Set<string>() // postId-reposterId combination
+    const deduplicatedFeed: FeedItem[] = []
+    
+    for (const item of combinedFeed) {
+      if (item.repostedByUserId) {
+        // This is a repost
+        const repostKey = `${item.id}-${item.repostedByUserId}`
+        // Skip if we've already seen this exact repost, or if the post author is someone we follow (will appear as direct)
+        if (seenRepostKeys.has(repostKey)) continue
+        // Skip if the original post is from someone we follow (it will appear in their direct posts)
+        if (authorIds.includes(item.authorId)) continue
+        seenRepostKeys.add(repostKey)
+        // Skip if we've already seen this post (either as direct or another repost)
+        if (seenPostIds.has(item.id)) continue
+        seenPostIds.add(item.id)
+        deduplicatedFeed.push(item)
+      } else {
+        // This is a direct post
+        if (seenPostIds.has(item.id)) continue
+        seenPostIds.add(item.id)
+        deduplicatedFeed.push(item)
+      }
+    }
+
+    // Take only limit + 1 items for pagination check
+    const paginatedFeed = deduplicatedFeed.slice(0, limit + 1)
 
     // Determine if there are more posts
-    const hasMore = feedPosts.length > limit
-    const postsToReturn = hasMore ? feedPosts.slice(0, -1) : feedPosts
-    const nextCursor = hasMore ? postsToReturn[postsToReturn.length - 1]?.createdAt.toISOString() : undefined
+    const hasMore = paginatedFeed.length > limit
+    const postsToReturn = hasMore ? paginatedFeed.slice(0, -1) : paginatedFeed
+    const nextCursor = hasMore 
+      ? postsToReturn[postsToReturn.length - 1]?.feedTimestamp.toISOString() 
+      : undefined
 
     if (postsToReturn.length === 0) {
       return { posts: [], nextCursor: undefined }
@@ -180,7 +274,15 @@ export const getFeed = authorized
     const enrichedPosts = postsToReturn.map(post => {
       const parentAuthor = post.parentPostId ? parentAuthorMap.get(post.parentPostId) : null
       return {
-        ...post,
+        id: post.id,
+        content: post.content,
+        authorId: post.authorId,
+        parentPostId: post.parentPostId,
+        createdAt: post.createdAt,
+        authorName: post.authorName,
+        authorEmail: post.authorEmail,
+        authorImage: post.authorImage,
+        authorIsPrivate: post.authorIsPrivate,
         likesCount: likeCountMap.get(post.id) ?? 0,
         repostsCount: repostCountMap.get(post.id) ?? 0,
         repliesCount: replyCountMap.get(post.id) ?? 0,
@@ -188,6 +290,11 @@ export const getFeed = authorized
         isReposted: userRepostedSet.has(post.id),
         replyToAuthorName: parentAuthor?.authorName ?? null,
         replyToAuthorEmail: parentAuthor?.authorEmail ?? null,
+        // Repost info
+        repostedByUserId: post.repostedByUserId,
+        repostedByUserName: post.repostedByUserName,
+        repostedByUserEmail: post.repostedByUserEmail,
+        repostedAt: post.repostedAt,
       }
     })
 
@@ -436,6 +543,314 @@ export const getPost = authorized
       isLiked: !!userLike,
       isReposted: !!userRepost,
     }
+  })
+
+// Get a single PUBLIC post by ID (no auth required - for SSR)
+// Only returns posts from non-private accounts
+export const getPublicPost = base
+  .input(PostIdSchema)
+  .handler(async ({ input }) => {
+    const { postId } = input
+
+    const [post] = await db
+      .select({
+        id: posts.id,
+        content: posts.content,
+        authorId: posts.authorId,
+        parentPostId: posts.parentPostId,
+        createdAt: posts.createdAt,
+        authorName: user.name,
+        authorEmail: user.email,
+        authorImage: user.image,
+        authorIsPrivate: user.isPrivate,
+      })
+      .from(posts)
+      .innerJoin(user, eq(posts.authorId, user.id))
+      .where(eq(posts.id, postId))
+      .limit(1)
+
+    if (!post) {
+      throw new ORPCError('NOT_FOUND', { message: 'Post not found' })
+    }
+
+    // Only return public posts (non-private accounts)
+    if (post.authorIsPrivate) {
+      throw new ORPCError('FORBIDDEN', { message: 'This post is from a private account' })
+    }
+
+    // Get counts (no user-specific interactions for public view)
+    const [[likeCount], [repostCount], [replyCount]] = await Promise.all([
+      db.select({ count: count() }).from(likes).where(eq(likes.postId, postId)),
+      db.select({ count: count() }).from(reposts).where(eq(reposts.postId, postId)),
+      db.select({ count: count() }).from(posts).where(eq(posts.parentPostId, postId)),
+    ])
+
+    return {
+      ...post,
+      likesCount: likeCount?.count ?? 0,
+      repostsCount: repostCount?.count ?? 0,
+      repliesCount: replyCount?.count ?? 0,
+      isLiked: false,
+      isReposted: false,
+    }
+  })
+
+// Get public replies for a post (no auth required - for SSR)
+// Only returns replies from non-private accounts
+export const getPublicPostReplies = base
+  .input(z.object({
+    postId: z.string(),
+    limit: z.number().min(1).max(50).default(20),
+    cursor: z.string().optional(),
+  }))
+  .handler(async ({ input }) => {
+    const { postId, limit, cursor } = input
+
+    // Fetch direct replies first (only from public users)
+    const directRepliesQuery = db
+      .select({
+        id: posts.id,
+        content: posts.content,
+        authorId: posts.authorId,
+        parentPostId: posts.parentPostId,
+        createdAt: posts.createdAt,
+        authorName: user.name,
+        authorEmail: user.email,
+        authorImage: user.image,
+        authorIsPrivate: user.isPrivate,
+      })
+      .from(posts)
+      .innerJoin(user, eq(posts.authorId, user.id))
+      .where(
+        cursor
+          ? and(
+              eq(posts.parentPostId, postId),
+              eq(user.isPrivate, false),
+              sql`${posts.createdAt} < ${new Date(cursor)}`
+            )
+          : and(
+              eq(posts.parentPostId, postId),
+              eq(user.isPrivate, false)
+            )
+      )
+      .orderBy(desc(posts.createdAt))
+      .limit(limit + 1)
+
+    const directReplies = await directRepliesQuery
+
+    const hasMore = directReplies.length > limit
+    const repliesToReturn = hasMore ? directReplies.slice(0, -1) : directReplies
+    const nextCursor = hasMore ? repliesToReturn[repliesToReturn.length - 1]?.createdAt.toISOString() : undefined
+
+    if (repliesToReturn.length === 0) {
+      return { replies: [], nextCursor: undefined }
+    }
+
+    // Recursive function to fetch all public descendants
+    async function fetchAllPublicDescendants(parentIds: string[]): Promise<typeof directReplies> {
+      if (parentIds.length === 0) return []
+      
+      const children = await db
+        .select({
+          id: posts.id,
+          content: posts.content,
+          authorId: posts.authorId,
+          parentPostId: posts.parentPostId,
+          createdAt: posts.createdAt,
+          authorName: user.name,
+          authorEmail: user.email,
+          authorImage: user.image,
+          authorIsPrivate: user.isPrivate,
+        })
+        .from(posts)
+        .innerJoin(user, eq(posts.authorId, user.id))
+        .where(and(
+          inArray(posts.parentPostId, parentIds),
+          eq(user.isPrivate, false)
+        ))
+        .orderBy(desc(posts.createdAt))
+      
+      if (children.length === 0) return []
+      
+      const childIds = children.map(c => c.id)
+      const grandchildren = await fetchAllPublicDescendants(childIds)
+      
+      return [...children, ...grandchildren]
+    }
+
+    // Fetch all nested replies recursively
+    const directReplyIds = repliesToReturn.map(r => r.id)
+    const allNestedReplies = await fetchAllPublicDescendants(directReplyIds)
+    
+    // Combine all posts for stats lookup
+    const allPosts = [...repliesToReturn, ...allNestedReplies]
+    const allPostIds = allPosts.map(p => p.id)
+
+    // Get counts for all posts at once
+    const [likeCounts, repostCounts, replyCounts] = await Promise.all([
+      db
+        .select({ postId: likes.postId, count: count() })
+        .from(likes)
+        .where(inArray(likes.postId, allPostIds))
+        .groupBy(likes.postId),
+      db
+        .select({ postId: reposts.postId, count: count() })
+        .from(reposts)
+        .where(inArray(reposts.postId, allPostIds))
+        .groupBy(reposts.postId),
+      db
+        .select({ parentPostId: posts.parentPostId, count: count() })
+        .from(posts)
+        .where(inArray(posts.parentPostId, allPostIds))
+        .groupBy(posts.parentPostId),
+    ])
+
+    const likeCountMap = new Map(likeCounts.map(l => [l.postId, l.count]))
+    const repostCountMap = new Map(repostCounts.map(r => [r.postId, r.count]))
+    const replyCountMap = new Map(replyCounts.map(r => [r.parentPostId, r.count]))
+
+    // Build a map of all enriched posts
+    const enrichedPostsMap = new Map<string, NestedReply>()
+    
+    for (const post of allPosts) {
+      enrichedPostsMap.set(post.id, {
+        ...post,
+        authorIsPrivate: post.authorIsPrivate,
+        likesCount: likeCountMap.get(post.id) ?? 0,
+        repostsCount: repostCountMap.get(post.id) ?? 0,
+        repliesCount: replyCountMap.get(post.id) ?? 0,
+        isLiked: false,
+        isReposted: false,
+        nestedReplies: [],
+      })
+    }
+
+    // Build the tree structure
+    for (const post of allNestedReplies) {
+      if (post.parentPostId && enrichedPostsMap.has(post.parentPostId)) {
+        const parent = enrichedPostsMap.get(post.parentPostId)!
+        const child = enrichedPostsMap.get(post.id)!
+        parent.nestedReplies.push(child)
+      }
+    }
+
+    // Sort nested replies by createdAt (newest first)
+    for (const post of enrichedPostsMap.values()) {
+      post.nestedReplies.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    }
+
+    // Get top-level replies with their nested tree
+    const enrichedReplies = repliesToReturn.map(reply => enrichedPostsMap.get(reply.id)!)
+
+    return { replies: enrichedReplies, nextCursor }
+  })
+
+// Get public parent thread (all ancestors of a post - no auth required for SSR)
+export const getPublicPostThread = base
+  .input(PostIdSchema)
+  .handler(async ({ input }) => {
+    const { postId } = input
+
+    // Walk up the parent chain to get all ancestors
+    const ancestors: Array<{
+      id: string
+      content: string
+      authorId: string
+      parentPostId: string | null
+      createdAt: Date
+      authorName: string | null
+      authorEmail: string
+      authorImage: string | null
+      authorIsPrivate: boolean
+    }> = []
+
+    let currentPostId: string | null = postId
+    const maxDepth = 50 // Prevent infinite loops
+
+    // First, get the current post to find its parent
+    const [currentPost] = await db
+      .select({ parentPostId: posts.parentPostId })
+      .from(posts)
+      .where(eq(posts.id, postId))
+      .limit(1)
+
+    if (!currentPost) {
+      throw new ORPCError('NOT_FOUND', { message: 'Post not found' })
+    }
+
+    currentPostId = currentPost.parentPostId
+
+    // Walk up the parent chain
+    let depth = 0
+    while (currentPostId && depth < maxDepth) {
+      const [parent] = await db
+        .select({
+          id: posts.id,
+          content: posts.content,
+          authorId: posts.authorId,
+          parentPostId: posts.parentPostId,
+          createdAt: posts.createdAt,
+          authorName: user.name,
+          authorEmail: user.email,
+          authorImage: user.image,
+          authorIsPrivate: user.isPrivate,
+        })
+        .from(posts)
+        .innerJoin(user, eq(posts.authorId, user.id))
+        .where(eq(posts.id, currentPostId))
+        .limit(1)
+
+      if (!parent) break
+
+      // Only include public users in the thread
+      if (!parent.authorIsPrivate) {
+        ancestors.unshift(parent) // Add to beginning to maintain chronological order
+      }
+      
+      currentPostId = parent.parentPostId
+      depth++
+    }
+
+    if (ancestors.length === 0) {
+      return { thread: [] }
+    }
+
+    const ancestorIds = ancestors.map(a => a.id)
+
+    // Get counts for all ancestors
+    const [likeCounts, repostCounts, replyCounts] = await Promise.all([
+      db
+        .select({ postId: likes.postId, count: count() })
+        .from(likes)
+        .where(inArray(likes.postId, ancestorIds))
+        .groupBy(likes.postId),
+      db
+        .select({ postId: reposts.postId, count: count() })
+        .from(reposts)
+        .where(inArray(reposts.postId, ancestorIds))
+        .groupBy(reposts.postId),
+      db
+        .select({ parentPostId: posts.parentPostId, count: count() })
+        .from(posts)
+        .where(inArray(posts.parentPostId, ancestorIds))
+        .groupBy(posts.parentPostId),
+    ])
+
+    const likeCountMap = new Map(likeCounts.map(l => [l.postId, l.count]))
+    const repostCountMap = new Map(repostCounts.map(r => [r.postId, r.count]))
+    const replyCountMap = new Map(replyCounts.map(r => [r.parentPostId, r.count]))
+
+    const enrichedThread = ancestors.map(post => ({
+      ...post,
+      authorIsPrivate: post.authorIsPrivate,
+      likesCount: likeCountMap.get(post.id) ?? 0,
+      repostsCount: repostCountMap.get(post.id) ?? 0,
+      repliesCount: replyCountMap.get(post.id) ?? 0,
+      isLiked: false,
+      isReposted: false,
+    }))
+
+    return { thread: enrichedThread }
   })
 
 // Type for recursive nested replies
@@ -1156,8 +1571,11 @@ export const feedRouter = {
   followUser,
   isFollowing,
   getPost,
+  getPublicPost,
   getPostReplies,
+  getPublicPostReplies,
   getPostThread,
+  getPublicPostThread,
   getProfile,
   getMyProfile,
   updatePrivacy,

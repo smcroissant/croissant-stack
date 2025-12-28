@@ -168,9 +168,45 @@ export function useFollowUser() {
     mutationFn: async (userId: string) => {
       return orpc.feed.followUser.call({ userId });
     },
-    onSuccess: () => {
+    onMutate: async (userId) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ["profile", userId] });
+
+      // Snapshot the previous value
+      const previousProfile = queryClient.getQueryData(["profile", userId]);
+
+      // Optimistically update the profile
+      queryClient.setQueryData(["profile", userId], (old: any) => {
+        if (!old) return old;
+        const newIsFollowing = !old.isFollowing;
+        return {
+          ...old,
+          isFollowing: newIsFollowing,
+          followersCount: newIsFollowing 
+            ? old.followersCount + 1 
+            : Math.max(0, old.followersCount - 1),
+        };
+      });
+
+      return { previousProfile, userId };
+    },
+    onError: (_err, userId, context) => {
+      // Rollback on error
+      if (context?.previousProfile) {
+        queryClient.setQueryData(["profile", userId], context.previousProfile);
+      }
+    },
+    onSettled: (_data, _error, userId) => {
       // Invalidate the feed since following changes what appears
       queryClient.invalidateQueries({ queryKey: ["feed"] });
+      // Invalidate profile to get fresh data
+      queryClient.invalidateQueries({ queryKey: ["profile", userId] });
+      // Invalidate isFollowing query
+      queryClient.invalidateQueries({ queryKey: ["isFollowing", userId] });
+      // Invalidate user posts/reposts/likes in case visibility changed
+      queryClient.invalidateQueries({ queryKey: ["userPosts", userId] });
+      queryClient.invalidateQueries({ queryKey: ["userReposts", userId] });
+      queryClient.invalidateQueries({ queryKey: ["userLikes", userId] });
     },
   });
 }
@@ -189,7 +225,7 @@ export function useIsFollowing(userId: string) {
 }
 
 /**
- * Hook to fetch a single post
+ * Hook to fetch a single post (requires auth)
  */
 export function usePost(postId: string) {
   return useQuery({
@@ -202,7 +238,23 @@ export function usePost(postId: string) {
 }
 
 /**
- * Hook to fetch replies for a post with infinite scroll
+ * Hook to fetch a single PUBLIC post (no auth required)
+ * Used for SSR hydration and unauthenticated views
+ */
+export function usePublicPost(postId: string, initialData?: any) {
+  return useQuery({
+    queryKey: ["publicPost", postId],
+    queryFn: async () => {
+      return orpc.feed.getPublicPost.call({ postId });
+    },
+    enabled: !!postId,
+    initialData,
+    staleTime: initialData ? 1000 * 60 : 0, // Keep initial data fresh for 1 minute
+  });
+}
+
+/**
+ * Hook to fetch replies for a post with infinite scroll (requires auth)
  */
 export function usePostReplies(postId: string, limit: number = 20) {
   return useInfiniteQuery({
@@ -222,7 +274,28 @@ export function usePostReplies(postId: string, limit: number = 20) {
 }
 
 /**
- * Hook to fetch parent thread (ancestors) of a post
+ * Hook to fetch PUBLIC replies for a post with infinite scroll (no auth required)
+ */
+export function usePublicPostReplies(postId: string, limit: number = 20, initialData?: any) {
+  return useInfiniteQuery({
+    queryKey: ["publicPostReplies", postId, limit],
+    queryFn: async ({ pageParam }) => {
+      const result = await orpc.feed.getPublicPostReplies.call({
+        postId,
+        limit,
+        cursor: pageParam,
+      });
+      return result;
+    },
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    initialPageParam: undefined as string | undefined,
+    enabled: !!postId,
+    initialData: initialData ? { pages: [initialData], pageParams: [undefined] } : undefined,
+  });
+}
+
+/**
+ * Hook to fetch parent thread (ancestors) of a post (requires auth)
  */
 export function usePostThread(postId: string) {
   return useQuery({
@@ -231,6 +304,21 @@ export function usePostThread(postId: string) {
       return orpc.feed.getPostThread.call({ postId });
     },
     enabled: !!postId,
+  });
+}
+
+/**
+ * Hook to fetch PUBLIC parent thread (ancestors) of a post (no auth required)
+ */
+export function usePublicPostThread(postId: string, initialData?: any) {
+  return useQuery({
+    queryKey: ["publicPostThread", postId],
+    queryFn: async () => {
+      return orpc.feed.getPublicPostThread.call({ postId });
+    },
+    enabled: !!postId,
+    initialData,
+    staleTime: initialData ? 1000 * 60 : 0,
   });
 }
 

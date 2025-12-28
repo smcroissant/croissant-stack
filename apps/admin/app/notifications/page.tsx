@@ -1,124 +1,116 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { NotificationCard } from "../components/notification-card";
 import { Button } from "@repo/ui/components/button";
 import { Tabs, TabsList, TabsTrigger } from "@repo/ui/components/tabs";
-import { Bell, BellOff, CheckCheck } from "lucide-react";
+import { Skeleton } from "@repo/ui/components/skeleton";
+import { Bell, BellOff, CheckCheck, Trash2, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../providers/auth-provider";
-
-interface Notification {
-  id: string;
-  type: "like" | "repost" | "reply" | "follow";
-  actorId: string;
-  actorName: string | null;
-  actorEmail: string;
-  postId: string | null;
-  postContent: string | null;
-  isRead: boolean;
-  createdAt: Date;
-}
-
-// Fake notifications data
-const FAKE_NOTIFICATIONS: Notification[] = [
-  {
-    id: "1",
-    type: "like",
-    actorId: "user-1",
-    actorName: "John Doe",
-    actorEmail: "john@example.com",
-    postId: "post-1",
-    postContent: "Just shipped a new feature! Check it out.",
-    isRead: false,
-    createdAt: new Date(Date.now() - 1000 * 60 * 5), // 5 minutes ago
-  },
-  {
-    id: "2",
-    type: "repost",
-    actorId: "user-2",
-    actorName: "Jane Smith",
-    actorEmail: "jane@example.com",
-    postId: "post-2",
-    postContent: "Working on something exciting today!",
-    isRead: false,
-    createdAt: new Date(Date.now() - 1000 * 60 * 30), // 30 minutes ago
-  },
-  {
-    id: "3",
-    type: "reply",
-    actorId: "user-3",
-    actorName: "Bob Johnson",
-    actorEmail: "bob@example.com",
-    postId: "post-3",
-    postContent: "Great post! Would love to hear more about this.",
-    isRead: false,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60), // 1 hour ago
-  },
-  {
-    id: "4",
-    type: "follow",
-    actorId: "user-4",
-    actorName: "Alice Williams",
-    actorEmail: "alice@example.com",
-    postId: null,
-    postContent: null,
-    isRead: true,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 hours ago
-  },
-  {
-    id: "5",
-    type: "like",
-    actorId: "user-5",
-    actorName: "Charlie Brown",
-    actorEmail: "charlie@example.com",
-    postId: "post-4",
-    postContent: "Amazing work on the new design system!",
-    isRead: true,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24), // 1 day ago
-  },
-];
+import {
+  useNotifications,
+  useUnreadNotificationsCount,
+  useMarkNotificationAsRead,
+  useMarkAllNotificationsAsRead,
+  useClearAllNotifications,
+  type Notification,
+} from "../hooks";
 
 export default function NotificationsPage() {
   const router = useRouter();
   const { session } = useAuth();
 
-  const [notifications, setNotifications] = useState<Notification[]>(FAKE_NOTIFICATIONS);
   const [filter, setFilter] = useState<"all" | "unread">("all");
+  const loadMoreRef = useRef<HTMLDivElement>(null);
 
-  const handleMarkAsRead = async (notificationId: string) => {
-    // Update local state
-    setNotifications((prev) =>
-      prev.map((notif) =>
-        notif.id === notificationId ? { ...notif, isRead: true } : notif
-      )
+  // Hooks for data fetching
+  const {
+    data,
+    isLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+    error,
+  } = useNotifications();
+
+  const { data: unreadCountData } = useUnreadNotificationsCount();
+  const markAsRead = useMarkNotificationAsRead();
+  const markAllAsRead = useMarkAllNotificationsAsRead();
+  const clearAll = useClearAllNotifications();
+
+  // Infinite scroll with IntersectionObserver
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      },
+      { threshold: 0 }
     );
-  };
 
-  const handleMarkAllAsRead = async () => {
-    // Update local state
-    setNotifications((prev) =>
-      prev.map((notif) => ({ ...notif, isRead: true }))
-    );
-  };
-
-  const handleNotificationClick = (notification: Notification) => {
-    // Mark as read
-    if (!notification.isRead) {
-      handleMarkAsRead(notification.id);
+    const currentRef = loadMoreRef.current;
+    if (currentRef) {
+      observer.observe(currentRef);
     }
 
-    // Navigate based on notification type
-    if (notification.type === "follow") {
-      router.push(`/profile/${notification.actorId}`);
-    } else if (notification.postId) {
-      router.push(`/post/${notification.postId}`);
-    }
-  };
+    return () => {
+      if (currentRef) {
+        observer.unobserve(currentRef);
+      }
+    };
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  const handleActorClick = (actorId: string) => {
-    router.push(`/profile/${actorId}`);
-  };
+  // Flatten paginated notifications and cast the type properly
+  const notifications: Notification[] = (
+    data?.pages.flatMap((page) => page.notifications) ?? []
+  ).map((n) => ({
+    ...n,
+    type: n.type as Notification["type"],
+    actorName: n.actorName ?? null,
+  }));
+
+  const unreadCount = unreadCountData?.count ?? 0;
+
+  const handleMarkAsRead = useCallback(
+    (notificationId: string) => {
+      markAsRead.mutate(notificationId);
+    },
+    [markAsRead]
+  );
+
+  const handleMarkAllAsRead = useCallback(() => {
+    markAllAsRead.mutate();
+  }, [markAllAsRead]);
+
+  const handleClearAll = useCallback(() => {
+    clearAll.mutate();
+  }, [clearAll]);
+
+  const handleNotificationClick = useCallback(
+    (notification: Notification) => {
+      // Mark as read if unread
+      if (!notification.isRead) {
+        handleMarkAsRead(notification.id);
+      }
+
+      // Navigate based on notification type
+      if (notification.type === "follow") {
+        router.push(`/profile/${notification.actorId}`);
+      } else if (notification.postId) {
+        router.push(`/feed/${notification.postId}`);
+      }
+    },
+    [handleMarkAsRead, router]
+  );
+
+  const handleActorClick = useCallback(
+    (actorId: string) => {
+      router.push(`/profile/${actorId}`);
+    },
+    [router]
+  );
 
   if (!session) {
     return (
@@ -134,11 +126,24 @@ export default function NotificationsPage() {
     );
   }
 
-  const filteredNotifications = filter === "unread"
-    ? notifications.filter((n) => !n.isRead)
-    : notifications;
+  if (error) {
+    return (
+      <div className="max-w-2xl mx-auto p-4">
+        <div className="flex flex-col items-center justify-center p-12 text-center">
+          <BellOff className="w-16 h-16 text-destructive mb-4" />
+          <p className="text-muted-foreground mb-4">
+            Failed to load notifications
+          </p>
+          <Button onClick={() => window.location.reload()}>Try again</Button>
+        </div>
+      </div>
+    );
+  }
 
-  const unreadCount = notifications.filter((n) => !n.isRead).length;
+  const filteredNotifications =
+    filter === "unread"
+      ? notifications.filter((n) => !n.isRead)
+      : notifications;
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -153,21 +158,43 @@ export default function NotificationsPage() {
               </span>
             )}
           </h1>
-          {unreadCount > 0 && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="gap-2"
-              onClick={handleMarkAllAsRead}
-            >
-              <CheckCheck className="w-4 h-4" />
-              Mark all read
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {unreadCount > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-2"
+                onClick={handleMarkAllAsRead}
+                disabled={markAllAsRead.isPending}
+              >
+                {markAllAsRead.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <CheckCheck className="w-4 h-4" />
+                )}
+                Mark all read
+              </Button>
+            )}
+            {notifications.length > 0 && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="gap-2 text-muted-foreground hover:text-destructive"
+                onClick={handleClearAll}
+                disabled={clearAll.isPending}
+              >
+                {clearAll.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
+              </Button>
+            )}
+          </div>
         </div>
 
         <div className="px-4 pb-3">
-          <Tabs value={filter} onValueChange={(v) => setFilter(v as any)}>
+          <Tabs value={filter} onValueChange={(v) => setFilter(v as "all" | "unread")}>
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="all">All</TabsTrigger>
               <TabsTrigger value="unread">
@@ -183,7 +210,20 @@ export default function NotificationsPage() {
         </div>
       </div>
 
-      {filteredNotifications.length === 0 ? (
+      {isLoading ? (
+        <div className="p-4 space-y-3">
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="flex gap-3 p-4">
+              <Skeleton className="w-5 h-5 rounded" />
+              <Skeleton className="w-10 h-10 rounded-full" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-3 w-1/4" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : filteredNotifications.length === 0 ? (
         <div className="flex flex-col items-center justify-center p-12 text-center">
           <BellOff className="w-16 h-16 text-muted-foreground mb-4" />
           <p className="text-muted-foreground mb-2">
@@ -201,11 +241,23 @@ export default function NotificationsPage() {
           {filteredNotifications.map((notification) => (
             <NotificationCard
               key={notification.id}
-              notification={notification}
+              notification={{
+                ...notification,
+                createdAt: new Date(notification.createdAt),
+              }}
               onNotificationClick={handleNotificationClick}
               onActorClick={handleActorClick}
             />
           ))}
+
+          {/* Load more trigger */}
+          {hasNextPage && (
+            <div ref={loadMoreRef} className="flex justify-center py-4">
+              {isFetchingNextPage && (
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
