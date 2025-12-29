@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@repo/ui/compo
 import { Button } from "@repo/ui/components/button";
 import { Textarea } from "@repo/ui/components/textarea";
 import { Avatar } from "@repo/ui/components/avatar";
+import { toast } from "@repo/ui/components/sonner";
 
 interface ComposePostProps {
   open: boolean;
@@ -34,8 +35,10 @@ export function ComposePost({
       await onSubmit(content, parentPostId);
       setContent("");
       onOpenChange(false);
+      toast.success(parentPostId ? "Reply posted!" : "Post published!");
     } catch (error) {
       console.error("Failed to create post:", error);
+      toast.error("Failed to publish. Please try again.");
     } finally {
       setIsSubmitting(false);
     }

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@repo/ui/components/sidebar";
+import { Toaster } from "@repo/ui/components/sonner";
 import "@repo/ui/globals.css";
 import { AppSidebar } from "./components/app-sidebar";
 import { AuthProvider } from "./providers/auth-provider";
@@ -51,6 +52,7 @@ export default function RootLayout({
               </SidebarProvider>
             </AuthProvider>
           </QueryProvider>
+          <Toaster richColors position="bottom-right" />
         </ThemeProvider>
       </body>
     </html>
